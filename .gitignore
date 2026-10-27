@@ -1,0 +1,5 @@
+node_modules/
+matches/
+*.log
+.DS_Store
+.claude/

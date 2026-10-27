@@ -1,0 +1,21 @@
+{
+  "name": "crux-arena",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "test": "node --test \"packages/*/test/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "demo": "node packages/cli/src/main.ts demo",
+    "crux": "node packages/cli/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.9",
+    "typescript": "7.0.2"
+  }
+}

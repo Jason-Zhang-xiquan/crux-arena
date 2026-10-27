@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crux Arena Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@vp-tw/cjk-web-fonts-fusion-pixel-font@0.0.1/dist/12px/proportional/zh_hans/Fusion-Pixel-12px-Proportional-Simplified-Chinese.css" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0816; --panel:#16112a; --line:#3b2f63; --ink:#f4ecff; --dim:#9a8cc2;
+  --gold:#f5c542; --red:#ff4d6d; --blue:#4cc9f0; --green:#7ae582; --violet:#b8a6ff;
+  --px:'Press Start 2P', monospace;
+  --zh:'Fusion Pixel 12px Proportional Simplified Chinese', 'Press Start 2P', monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#05030b}
+body{overflow:hidden}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{position:relative;flex:none;width:1280px;height:720px;background:var(--bg);color:var(--ink);
+  font-family:var(--zh);font-size:12px;overflow:hidden;transform-origin:center center}
+#stage::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:200;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.13) 0 1px,transparent 1px 3px)}
+.snap *,.snap *::before,.snap *::after{animation:none!important;transition:none!important}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+.px{font-family:var(--px)}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;left:0;top:0;width:1280px;height:88px;display:grid;
+  grid-template-columns:minmax(0,1fr) 280px minmax(0,1fr);background:linear-gradient(#1c1438,#0f0a21);
+  border-bottom:3px solid #000;box-shadow:0 3px 0 var(--line)}
+.side{display:flex;min-width:0}
+.side .plate{flex:1;min-width:0}
+.plate{display:flex;gap:10px;align-items:center;padding:10px 12px}
+#hud.compact .plate{gap:6px;padding:10px 6px}
+#hud.compact .portrait{width:44px;height:44px}
+#hud.compact .portrait canvas{width:36px!important;height:30px!important}
+#hud.compact .pname{font-size:8px}
+#hud.compact .pname .cred{display:none}
+.plate.r{flex-direction:row-reverse;text-align:right}
+.portrait{width:56px;height:56px;flex:none;display:grid;place-items:center;background:#0b0816;
+  border:3px solid currentColor;box-shadow:0 0 0 3px #000}
+.pinfo{flex:1;min-width:0}
+.pname{font-family:var(--px);font-size:10px;display:flex;gap:8px;align-items:baseline}
+.plate.r .pname{justify-content:flex-end}
+.pname .cred{font-size:7px;color:var(--dim)}
+.pstat{color:var(--dim);margin:5px 0 6px;height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pstat.live{color:var(--gold)}
+.bar{position:relative;height:14px;background:#2a0d18;border:2px solid #000;box-shadow:0 0 0 2px var(--line);overflow:hidden}
+.bar .ghost,.bar .fill{position:absolute;top:0;bottom:0;left:0}
+.plate.r .bar .ghost,.plate.r .bar .fill{left:auto;right:0}
+.bar .ghost{background:#fff;transition:width .6s steps(6) .35s}
+.bar .fill{background:linear-gradient(#ffe066 0 45%,#f5a623 45%);transition:width .25s steps(5)}
+.bar::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(0,0,0,.35) 9px 11px)}
+#modeLbl{font-family:var(--px);font-size:7px;color:var(--dim)}
+#hud.team #hudL{box-shadow:inset 0 -4px 0 #ff4d6d}
+#hud.team #hudR{box-shadow:inset 0 -4px 0 #4cc9f0}
+#center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:2px;
+  background:#0d0820;border-left:3px solid #000;border-right:3px solid #000}
+#roundLbl{font-family:var(--px);font-size:13px;color:var(--gold);text-shadow:2px 2px 0 #7a3b00}
+#mana{width:236px}
+#mana .bar .fill{background:linear-gradient(#a8e1ff 0 45%,#3a86ff 45%)}
+#mana .bar .ghost{background:#ff4d6d}
+#manaTxt{display:flex;justify-content:space-between;margin-top:4px;color:#bfe3ff}
+#manaTxt .px{font-size:7px;color:#8fb8ff}
+
+/* ---------- ARENA ---------- */
+#arena{position:absolute;left:0;top:91px;width:872px;height:432px;overflow:hidden}
+#bg{position:absolute;left:0;top:0;width:872px;height:432px}
+#demoTag{position:absolute;left:10px;bottom:8px;z-index:60;color:#d8cbff;background:rgba(0,0,0,.55);padding:4px 7px}
+#ctl{position:absolute;right:10px;top:8px;z-index:60;display:flex;gap:6px}
+.btn{font-family:var(--px);font-size:8px;color:var(--ink);background:#2c2252;border:2px solid #000;
+  box-shadow:0 0 0 2px #4a3b80;padding:6px 8px;cursor:pointer}
+.btn:hover{background:#3d2f70}
+.btn:active{transform:translateY(1px)}
+.fighter{position:absolute;width:120px;height:100px;color:var(--fc)}
+.fighter .bob{animation:bob .9s steps(1) infinite}
+@keyframes bob{50%{transform:translateY(-3px)}}
+.fighter.flip .spr{transform:scaleX(-1)}
+.fighter .shadow{position:absolute;left:18px;bottom:5px;width:84px;height:8px;background:rgba(0,0,0,.5)}
+.fighter .ntag{position:absolute;left:50%;bottom:-18px;transform:translateX(-50%);font-family:var(--px);
+  font-size:8px;white-space:nowrap;padding:3px 5px;background:rgba(0,0,0,.65);color:var(--fc)}
+.fighter .status{position:absolute;left:50%;top:-40px;transform:translateX(-50%);display:none}
+.fighter .status.on{display:block}
+.bubble{background:#fff;color:#000;border:3px solid #000;padding:5px 7px;font-family:var(--px);font-size:8px;white-space:nowrap}
+.bubble .d{animation:dots 1s steps(1) infinite}
+.bubble .d:nth-child(2){animation-delay:.33s}.bubble .d:nth-child(3){animation-delay:.66s}
+@keyframes dots{0%,100%{opacity:.15}50%{opacity:1}}
+.fighter.dim{filter:grayscale(.85) brightness(.55)}
+.fighter.hurt .spr{animation:hurt .32s steps(2) 2}
+@keyframes hurt{50%{filter:brightness(4)}}
+.aura{position:absolute;left:0;right:0;bottom:6px;height:110px;pointer-events:none;display:none}
+.fighter.charging .aura{display:block}
+.aura i{position:absolute;bottom:0;width:6px;height:6px;background:var(--fc);animation:rise .8s steps(6) infinite}
+@keyframes rise{from{transform:translateY(0);opacity:1}to{transform:translateY(-96px);opacity:0}}
+
+#board{position:absolute;left:246px;top:34px;width:380px;height:320px;z-index:20}
+.card{position:absolute;width:182px;height:124px;background:#f4ecff;color:#1a1233;border:3px solid #000;
+  box-shadow:4px 4px 0 rgba(0,0,0,.55),inset 0 0 0 3px #fff;padding:8px 10px 8px 17px;opacity:0;cursor:default}
+.card.in{opacity:1;animation:drop .35s steps(5)}
+@keyframes drop{from{transform:translateY(-40px);opacity:0}to{transform:none;opacity:1}}
+.card .stripe{position:absolute;left:0;top:0;bottom:0;width:8px;background:var(--oc);border-right:2px solid #000}
+.card .hd{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.card .cid{font-family:var(--px);font-size:10px}
+.card .lbl{color:#fff;background:#6b5aa8;padding:0 4px;line-height:15px;white-space:nowrap}
+.card .lbl.fact{background:#1f8a5b}
+.card .chk{padding:0 4px;line-height:15px;background:#ffd166;display:none;white-space:nowrap}
+.card .chk.on{display:inline-block}
+.card .chk.ok{background:#7ae582}
+.card .own{position:absolute;right:8px;top:-12px;font-family:var(--px);font-size:7px;color:var(--oc);background:#1a1233;padding:3px 5px;border:2px solid #000}
+.card .txt{line-height:16px;height:48px;overflow:hidden}
+.card .hp{position:absolute;left:17px;right:10px;bottom:9px;display:flex;gap:2px;align-items:center}
+.card .hp i{flex:1;height:9px;background:#e23d5a;border:1px solid #000}
+.card .hp i.off{background:#cbbfe3}
+.card .hpn{font-family:var(--px);font-size:7px;width:40px;text-align:right}
+.card .sup{position:absolute;left:16px;top:-9px;display:flex;gap:3px}
+.card .sup i{width:12px;height:12px;border:2px solid #000;background:var(--sc)}
+.card.hit{animation:chit .3s steps(3)}
+@keyframes chit{33%{transform:translate(-5px,2px);background:#ffb3c1}66%{transform:translate(5px,-2px)}}
+.card.shield{box-shadow:0 0 0 5px var(--blue),4px 4px 0 rgba(0,0,0,.55),inset 0 0 0 3px #bdefff}
+.card.clash{box-shadow:0 0 0 4px var(--red),4px 4px 0 rgba(0,0,0,.55),inset 0 0 0 3px #fff}
+.card.ko{filter:grayscale(1) brightness(.5)}
+.card .stamp{position:absolute;inset:0;display:none;place-items:center;font-family:var(--px);font-size:26px;
+  color:var(--red);text-shadow:3px 3px 0 #000;transform:rotate(-12deg);filter:none}
+.card.ko .stamp{display:grid}
+.card.hl{outline:3px dashed var(--gold);outline-offset:4px}
+#consensus{position:absolute;left:0;top:286px;width:380px;padding:6px 10px;background:#2a2108;color:#ffe9a8;
+  border:3px solid var(--gold);box-shadow:3px 3px 0 #000;display:none;text-align:center}
+#consensus.in{display:block;animation:drop .35s steps(5)}
+.rul{position:absolute;z-index:45;background:var(--violet);color:#000;padding:2px 6px;border:2px solid #000;white-space:nowrap;pointer-events:none}
+.pop{position:absolute;z-index:46;font-family:var(--px);font-size:16px;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000;pointer-events:none;white-space:nowrap}
+.pop.dmg{color:#ff6b6b}.pop.heal{color:var(--blue)}.pop.save{color:var(--green);font-size:10px}
+.pop.crit{color:var(--gold);font-size:22px}
+.proj,.trail,.spark{position:absolute;left:0;top:0;width:12px;height:12px;background:var(--pc);z-index:40;pointer-events:none}
+.proj{box-shadow:0 0 0 3px #fff}
+.proj.crit{width:16px;height:16px;box-shadow:0 0 0 3px #fff,0 0 0 6px var(--gold)}
+.trail{opacity:.55;animation:fade .28s linear forwards}
+.spark{width:6px;height:6px}
+@keyframes fade{to{opacity:0}}
+#banner{position:absolute;inset:0;z-index:55;display:none;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;
+  background:linear-gradient(transparent 32%,rgba(0,0,0,.6) 32% 68%,transparent 68%)}
+#banner.on{display:flex}
+#banner .big{font-family:var(--px);font-size:44px;color:var(--gold);text-shadow:4px 4px 0 #7a3b00,-3px -3px 0 #000,3px -3px 0 #000,-3px 3px 0 #000}
+#banner .small{margin-top:16px;font-size:24px;line-height:24px;color:#fff;text-shadow:2px 2px 0 #000}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:58}
+
+/* ---------- DIALOGUE ---------- */
+#dlg{position:absolute;left:0;top:526px;width:872px;height:194px;padding:10px}
+#dlg .box{height:100%;display:flex;gap:16px;padding:12px 14px;background:#0e0920;border:3px solid #fff;box-shadow:0 0 0 3px #000,inset 0 0 0 3px #000}
+#dlgPortrait{width:112px;height:112px;flex:none;display:grid;place-items:center;background:#1b1436;border:3px solid var(--sc,#fff)}
+#dlgPortrait .q{font-family:var(--px);font-size:44px;color:#fff}
+#dlgBody{flex:1;min-width:0}
+#dlgHd{display:flex;align-items:center;gap:10px;height:18px}
+#dlgName{font-family:var(--px);font-size:12px;color:var(--sc,#fff)}
+#dlgAct{color:#000;background:var(--gold);padding:0 6px;line-height:16px}
+#dlgAct:empty{display:none}
+#dlgEv{margin-left:auto;color:var(--blue);white-space:nowrap}
+#dlgText{margin-top:10px;font-size:24px;line-height:30px;height:126px;overflow:hidden}
+.caret{display:inline-block;width:12px;height:22px;background:#fff;vertical-align:-3px;margin-left:3px;animation:blink .7s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ---------- LOG ---------- */
+#log{position:absolute;left:882px;top:98px;width:388px;height:612px;display:flex;flex-direction:column;
+  background:var(--panel);border:3px solid #000;box-shadow:0 0 0 3px var(--line)}
+#logHd{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#1d1640;border-bottom:3px solid #000}
+#logHd h2{margin:0;font-family:var(--px);font-size:11px;color:var(--gold)}
+#logHd small{display:block;margin-top:5px;color:var(--dim)}
+#filters{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:2px solid #000}
+.chip{font-family:var(--px);font-size:7px;padding:4px 6px;border:2px solid currentColor;background:transparent;color:var(--c,#9a8cc2);cursor:pointer}
+.chip.on{background:var(--c,#9a8cc2);color:#0b0816}
+#lines{position:relative;flex:1;overflow-y:auto;padding:6px 8px;scrollbar-width:thin;scrollbar-color:#4a3b80 #120e24}
+.ln{padding:6px 7px;margin-bottom:5px;background:#120e24;border-left:4px solid var(--lc,#555);cursor:pointer}
+.ln:hover{background:#1c1636}
+.ln.new{animation:lnin .3s steps(3)}
+@keyframes lnin{from{transform:translateX(30px);opacity:0}}
+.ln .r1{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.ln .lid{font-family:var(--px);font-size:7px;color:var(--dim);width:26px}
+.ln .rd{font-family:var(--px);font-size:7px;color:var(--dim)}
+.tag{color:#000;padding:0 3px;line-height:15px}
+.tag.atk{background:#ff6b6b}.tag.def{background:var(--blue)}.tag.con{background:#fff}
+.tag.clm{background:#ffd166}.tag.jdg{background:var(--violet)}.tag.skp{background:var(--green)}.tag.q{background:#fff}
+.ln .who{font-family:var(--px);font-size:8px}
+.ln .tg{font-family:var(--px);font-size:8px;color:#fff}
+.ln .res{margin-left:auto;font-family:var(--px);font-size:8px;color:var(--dim)}
+.res.dmg{color:#ff6b6b}.res.heal{color:var(--blue)}.res.ko{color:var(--red)}.res.save{color:var(--green)}.res.ok{color:var(--gold)}
+.ln .r2{margin-top:5px;color:#e2d8ff;line-height:15px}
+.ln .rl{color:var(--violet)}
+.ref{color:var(--gold);margin-left:6px;cursor:pointer;border-bottom:1px solid var(--gold)}
+.ln .det{display:none;margin-top:7px;padding-top:7px;border-top:1px dashed var(--line);color:#bfb2e6;line-height:16px}
+.ln .det b{color:#fff;font-weight:normal;margin-right:6px}
+.ln.open .det{display:block}
+.ln.flash{animation:lflash 1s steps(4)}
+@keyframes lflash{25%,75%{background:#5a4610}}
+.ln.hl{background:#2a2050;box-shadow:inset 0 0 0 2px var(--gold)}
+.ln.hide{display:none}
+#trace{border-top:3px solid #000;padding:10px 12px;background:#1d1640;min-height:92px}
+#trace h3{margin:0 0 8px;font-family:var(--px);font-size:9px;color:var(--gold)}
+#trace .empty{color:var(--dim)}
+.edge{margin-bottom:7px}
+.edge .e1{display:flex;align-items:center;gap:7px;font-family:var(--px);font-size:8px}
+.edge .e1 .ar{color:var(--gold)}
+.edge .e1 .on{margin-left:auto;color:#fff}
+.edge .e2{margin-top:4px;color:#d9ccff}
+
+/* ---------- RESULT ---------- */
+#result{position:absolute;left:0;top:91px;width:872px;height:629px;z-index:80;display:none;padding:22px 28px;
+  background:#090614}
+#result.on{display:block;animation:drop .4s steps(6)}
+#result h1{margin:0;font-family:var(--px);font-size:22px;color:var(--gold);text-shadow:3px 3px 0 #7a3b00}
+#result .sub{margin-top:8px;color:var(--dim)}
+.champ{margin-top:14px;padding:14px 16px;background:#f4ecff;color:#1a1233;border:3px solid #000;box-shadow:0 0 0 3px var(--gold),5px 5px 0 #000;font-size:24px;line-height:30px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.col h4{margin:0 0 8px;font-family:var(--px);font-size:9px}
+.col h4.ok{color:var(--green)}.col h4.bad{color:var(--red)}
+.ci{padding:6px 8px;margin-bottom:6px;background:#16112a;border-left:4px solid var(--oc)}
+.ci .t{color:#fff}
+.ci .tr{margin-top:4px;color:var(--violet)}
+.ci .tr .ref{margin-left:0}
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px}
+.note{padding:8px 10px;background:#16112a;border:2px dashed var(--line);line-height:16px}
+.note b{display:block;font-family:var(--px);font-size:8px;font-weight:normal;color:var(--gold);margin-bottom:5px}
+.stats{display:flex;gap:10px;margin-top:14px;align-items:stretch}
+.st{flex:1;padding:8px 10px;background:#0e0920;border:3px solid #000;box-shadow:0 0 0 2px var(--line)}
+.st .v{font-family:var(--px);font-size:13px;color:#fff}
+.st .k{margin-top:5px;color:var(--dim)}
+.st.mvp .v{color:var(--gold)}
+.actions{position:absolute;right:28px;top:22px;display:flex;gap:8px}
+
+/* ---------- MODAL ---------- */
+#modal{position:absolute;inset:0;z-index:150;display:none;place-items:center;background:rgba(0,0,0,.72)}
+#modal.on{display:grid}
+#modal .mbox{width:820px;height:580px;display:flex;flex-direction:column;background:var(--panel);border:3px solid #000;box-shadow:0 0 0 3px var(--gold)}
+#modal .mhd{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:3px solid #000}
+#modal .mhd h2{margin:0 auto 0 0;font-family:var(--px);font-size:10px;color:var(--gold)}
+#modal pre{flex:1;margin:0;padding:12px 14px;overflow:auto;font-family:var(--zh);font-size:12px;line-height:17px;color:#e2d8ff;white-space:pre}
+</style>
+</head>
+<body>
+<div id="wrap">
+<div id="stage">
+  <div id="hud">
+    <div class="side" id="hudL"></div>
+    <div id="center">
+      <div id="modeLbl"></div>
+      <div id="roundLbl">READY</div>
+      <div id="mana">
+        <div class="bar"><div class="ghost"></div><div class="fill"></div></div>
+        <div id="manaTxt"><span class="px">MANA</span><span id="manaVal">0 / 60k tok · $0.00</span></div>
+      </div>
+    </div>
+    <div class="side" id="hudR"></div>
+  </div>
+
+  <div id="arena">
+    <canvas id="bg"></canvas>
+    <div id="demoTag">DEMO · 脚本回放（非真实模型输出）· 吉祥物为非官方同人形象</div>
+    <div id="ctl">
+      <button class="btn" id="bPause">PAUSE</button>
+      <button class="btn" id="bSpeed">1X</button>
+      <button class="btn" id="bTeam">TEAM</button>
+      <button class="btn" id="bReset">RESET</button>
+    </div>
+    <div id="board"><div id="consensus"></div></div>
+    <div id="banner"><div class="big"></div><div class="small"></div></div>
+    <div id="flash"></div>
+  </div>
+
+  <div id="dlg"><div class="box">
+    <div id="dlgPortrait"></div>
+    <div id="dlgBody">
+      <div id="dlgHd"><span id="dlgName"></span><span id="dlgAct"></span><span id="dlgEv"></span></div>
+      <div id="dlgText"></div>
+    </div>
+  </div></div>
+
+  <div id="log">
+    <div id="logHd">
+      <div><h2>BATTLE LOG</h2><small>点击展开详情 · 点 ←#编号 追溯原因</small></div>
+      <button class="btn" id="bExport">EXPORT .MD</button>
+    </div>
+    <div id="filters"></div>
+    <div id="lines"></div>
+    <div id="trace"><h3>WHO CONVINCED WHO · 说服链</h3><div id="edges"><div class="empty">暂无：认输必须注明被哪一步说服</div></div></div>
+  </div>
+
+  <div id="result"></div>
+
+  <div id="modal"><div class="mbox">
+    <div class="mhd"><h2>battle-log.md</h2><button class="btn" id="bCopy">COPY</button><button class="btn" id="bClose">CLOSE</button></div>
+    <pre id="mdOut"></pre>
+  </div></div>
+</div>
+</div>
+
+<script src="mascots.js"></script>
+<script>
+/* ============ 阵容：选人界面传入 ?team=crab,bot,...（2–6 人，按选择顺序 P1–P6） ============ */
+const DEFAULT_TEAM = ['crab', 'bot', 'star', 'whale'];
+const TEAM = (() => {
+  const raw = (new URLSearchParams(location.search).get('team') || '').split(',');
+  const team = [...new Set(raw)].filter(k => ROSTER.some(r => r.kind === k)).slice(0, 6);
+  return team.length >= 2 ? team : DEFAULT_TEAM;
+})();
+const QS = new URLSearchParams(location.search);
+const MODES = {ffa:'FFA · 混战', team:'TEAM · 红 vs 蓝'};
+const MODE = MODES[QS.get('mode')] ? QS.get('mode') : 'ffa';
+const WORKSPACE = (QS.get('dir') || '').trim().slice(0, 80);   // 文件夹模式：只读，只输出结论
+const EV = (web, file) => WORKSPACE ? file : web;
+const TEAMS = {red:{name:'红队 RED', color:'#ff4d6d'}, blue:{name:'蓝队 BLUE', color:'#4cc9f0'}};
+// 站位：单号站左、双号站右（组队模式：左红右蓝）；每侧最多 2 人用两排，3 人用三排
+const SPOTS = Math.ceil(TEAM.length / 2) > 2
+  ? [{x:126, b:28}, {x:14, b:86}, {x:118, b:144}]
+  : [{x:120, b:52}, {x:12, b:116}];
+const FIGHTERS = {};
+TEAM.forEach((kind, i) => {
+  const r = ROSTER.find(x => x.kind === kind), side = i % 2, spot = SPOTS[Math.floor(i / 2)];
+  FIGHTERS[kind] = {name:r.name, cls:r.zh, color:r.color, sprite:kind, x: side ? 872 - spot.x - 120 : spot.x, b:spot.b, flip:!!side, team: side ? 'blue' : 'red'};
+});
+const SYS = {
+  you:   {name:'YOU',   color:'#ffffff'},
+  judge: {name:'JUDGE', color:'#b8a6ff'},
+  chair: {name:'CHAIR', color:'#f5c542'},
+};
+// 剧本角色：P1 单体派（最终胜方）· P2 微服务派 · P3 Serverless 派 · P4 事实派 · P5 单体附议 · P6 微服务附议
+const P = {};
+TEAM.forEach((k, i) => { P['P' + (i + 1)] = k; });
+const N = k => FIGHTERS[k].name;
+const QUESTION = WORKSPACE ? '这个仓库的后端该继续单体，还是拆成微服务？（5 人团队，B2B SaaS）' : '5 人创业团队做 B2B SaaS，后端该上微服务还是单体？';
+const CLAIM_POOL = {
+  C1:{role:'P1', label:'推断', text:'先做模块化单体：按领域划清边界，真有瓶颈再拆', short:'先做模块化单体，按需再拆',
+      say:'先做模块化单体。按领域把代码分成清晰的模块，共用一个部署单元；哪个模块真成了瓶颈，再把它拆出去。'},
+  C2:{role:'P2', label:'推断', text:'一开始就上微服务：各模块独立部署、独立扩容', short:'一开始就上微服务',
+      say:'直接上微服务。每个模块独立部署、独立扩容，以后团队变大也不用推倒重来。'},
+  C3:{role:'P3', label:'推断', text:'全部用 Serverless 函数：免运维、按量付费', short:'全部 Serverless，免运维',
+      say:'全部用 Serverless 函数。不用管服务器，按调用量付费，早期流量小的时候几乎不花钱。'},
+  C4:{role:'P4', label:'事实', text:'自建 K8s 微服务，运维约需 1 名专职人力', short:'自建 K8s 运维≈1 名专职',
+      say:'先摆一个事实：自建 K8s 跑微服务，运维大约要占 1 名专职工程师。'},
+};
+const CLAIMS = {};
+Object.entries(CLAIM_POOL).forEach(([id, c]) => { if (P[c.role] && (MODE === 'ffa' || id === 'C1' || id === 'C2')) CLAIMS[id] = {owner:P[c.role], label:c.label, slot:Object.keys(CLAIMS).length, text:c.text, short:c.short}; });
+
+// 按阵容生成剧本：缺席的角色对应的动作自动跳过；每人每回合最多 1 次攻击 + 1 次防守
+function actMaker(S){
+  let n = 0;
+  return o => {
+    const id = 'A' + (++n), owner = CLAIMS[o.target]?.owner;
+    if (!o.cred) o.cred = o.type === 'attack' ? {[o.actor]: Math.round(o.dmg / 5), [owner]: -Math.round(o.dmg / 3.5)} : o.type === 'defend' ? {[o.actor]: Math.round(o.heal / 3)} : {};
+    S.push({...o, t:'act', id});
+    return id;
+  };
+}
+function buildScript(){
+  const S = [], has = id => !!CLAIMS[id], act = actMaker(S);
+  S.push({t:'question'}, {t:'banner', big:'ROUND 0', small:'BLIND DRAFT · 匿名盲答', round:0});
+  for (const id in CLAIMS) S.push({t:'claim', id, tok:2000, say:CLAIM_POOL[id].say});
+  if (P.P5) S.push({t:'second', actor:P.P5, target:'C1', tok:1800, why:'附议 C1：先单体，划清模块边界', say:'我的盲答和 C1 基本一致：先做单体，模块边界划清楚。'});
+  if (P.P6) S.push({t:'second', actor:P.P6, target:'C2', tok:1800, why:'附议 C2：服务拆开，扩张更顺', say:'我的盲答和 C2 一致：服务一开始就拆开，团队以后扩张更顺。'});
+  const clash = Object.keys(CLAIMS).filter(id => id !== 'C4');
+  S.push({t:'crux', tok:1100, clash, why:`${clash.join('/')} 互斥${has('C4') ? ' · C4 待验证' : ''}`, consensus:'共识：无论哪种架构，CI/CD 与监控先行',
+    say:`分歧点：${clash.join('、')} 互相冲突${has('C4') ? '；C4 是事实性主张，待验证' : ''}。共识：无论哪种架构，CI/CD 和监控都要先建好。`});
+
+  S.push({t:'banner', big:'ROUND 1', small:'FIGHT!', round:1});
+  const a1 = act({type:'attack', actor:P.P4 || P.P3 || P.P1, target:'C2', tool:true, verifies:has('C4') ? 'C4' : undefined, refs:has('C4') ? ['C4'] : [],
+    why:'抽 1 人运维=砍 20% 研发', ruling:'证据成立', dmg:40, crit:true, tok:2700,
+    steelman:'微服务确实便于独立扩容和独立部署。', ev:EV('[web] 小团队自建 K8s 运维投入调研（演示数据）', '[read] deploy/ 只有 docker-compose.yml，没有 K8s 清单（演示）'),
+    say:'5 个人里抽 1 个专职做 K8s 运维，等于直接砍掉 20% 的研发产能。早期产品最缺的就是迭代速度。'});
+  act({type:'defend', actor:P.P2, target:'C2', why:'托管 K8s 可降到 0.3 人', ruling:'部分成立', heal:10, tok:2400,
+    say:'可以用托管 K8s，集群运维交给云厂商，人力能降到 0.3 人左右。'});
+  let a3, a4;
+  if (has('C3')) {
+    a3 = act({type:'attack', actor:P.P1, target:'C3', why:'冷启动会击穿 p99 延迟', ruling:'成立', dmg:30, tok:2500,
+      steelman:'Serverless 确实免去了服务器运维。', say:'B2B 客户通常签 SLA。Serverless 冷启动会让 p99 延迟出现秒级尖刺。'});
+    a4 = act({type:'defend', actor:P.P3, target:'C3', why:'预留并发可消除冷启动', ruling:'成立，但抵消了省钱优势', heal:5, tok:2100,
+      say:'开预留并发就行，冷启动问题可以消除。'});
+  }
+  act({type:'attack', actor:P.P2, target:'C1', why:'单体后期拆分代价高', ruling:'模块边界可缓解', dmg:15, tok:2300,
+    steelman:'单体在早期开发最快、调试最简单。', say:'单体长大以后再拆，往往要付出大量重构成本，不如一开始就分开。'});
+  if (P.P5) act({type:'defend', actor:P.P5, target:'C1', why:'边界划好，拆分只是搬家', ruling:'成立', heal:10, tok:2000,
+    say:'只要一开始按领域划好模块边界，后面拆分就是搬家，不是重写。'});
+  if (P.P6) act({type:'attack', actor:P.P6, target:'C1', why:'单体一处出错，全站一起挂', ruling:'部分成立，可用隔离缓解', dmg:10, tok:2200,
+    steelman:'单体部署确实最简单。', say:'单体只有一个部署单元，一个模块出错，整个服务一起挂。'});
+
+  S.push({t:'banner', big:'ROUND 2', small:'FIGHT!', round:2});
+  const skipped = [P.P4, P.P5].filter(Boolean);
+  for (const k of skipped) S.push({t:'skip', actor:k, why:`立场与 ${N(P.P1)} 重合，轮空`, saved:2100,
+    say:`${N(k)} 的立场与 ${N(P.P1)} 重合，本回合轮空，省下约 2.1k tokens。`});
+  if (has('C3')) {
+    const a6 = act({type:'attack', actor:P.P1, target:'C3', tool:true, refs:[a4],
+      why:'预留并发低流量下比 VM 贵', ruling:'证据成立', dmg:45, crit:true, tok:2900,
+      steelman:'预留并发确实能消除冷启动。', ev:EV('[web] 云厂商预留并发定价页（演示数据）', '[read] docs/infra-cost.md:18-30 流量与账单（演示）'),
+      say:'预留并发按小时计费。早期 B2B 流量很低，这笔钱比一台小 VM 还贵，「按量付费」的优势没了。'});
+    act({type:'concede', actor:P.P3, target:'C3', refs:[a3, a6], shiftTo:'C1',
+      why:'成本优势不成立，改投 C1', edgeWhy:'冷启动 + 低流量下成本高', tok:900,
+      say:'我收回 C3。冷启动和低流量下的成本，这两点我反驳不了。改为支持 C1。'});
+  }
+  const a8 = act({type:'concede', actor:P.P2, target:'C2', refs:[a1], shiftTo:'C1',
+    why:'运维人力确实不够，有条件改投 C1', edgeWhy:'运维成本超出团队容量', tok:1100,
+    say:'我放弃 C2。5 人团队确实养不起专职运维。改为有条件支持 C1：团队超过 15 人，或某模块需要独立扩容时再拆。'});
+  if (P.P6) act({type:'shift', actor:P.P6, target:'C1', edgeOn:'C2', refs:[a1, a8],
+    why:'C2 已出局，有条件改投 C1', edgeWhy:'运维成本 + C2 作者已认输', tok:800,
+    say:'C2 的作者已经认输，运维成本这点我也认。我改为有条件支持 C1。'});
+
+  S.push({t:'converge', why:'立场收敛，提前结束', saved:9000, skipped,
+    basis:`全部 ${TEAM.length} 名选手支持 C1${skipped.length ? `（${skipped.map(N).join('、')} 轮空但立场相同）` : ''}`,
+    say:'剩余选手全部支持 C1，立场已收敛。提前结束，跳过第 3 回合，省下约 9k tokens。'});
+  S.push({t:'final', tok:5400, say:'综合存活论点、投票结果与少数派意见，生成冠军答案，并审计"无因认输"……'});
+  return S;
+}
+// 组队模式：左侧红队主张 C1，右侧蓝队主张 C2；队内先合议成一份立论，只打对方
+function buildTeamScript(){
+  const S = [], act = actMaker(S);
+  const red = TEAM.filter((_, i) => i % 2 === 0), blue = TEAM.filter((_, i) => i % 2 === 1);
+  S.push({t:'question'}, {t:'banner', big:'RED vs BLUE', small:'红队主张单体 · 蓝队主张微服务', round:0});
+  S.push({t:'banner', big:'ROUND 0', small:'TEAM DRAFT · 队内合议', round:0});
+  S.push({t:'claim', id:'C1', tok:2600, say:'红队合议：先做模块化单体，按领域划清边界，真有瓶颈再拆。'});
+  red.slice(1).forEach(k => S.push({t:'second', actor:k, target:'C1', tok:600, why:'队内补充：先把精力放在产品上', say:'补充一点：5 个人最缺的是迭代速度，先把精力放在产品上。'}));
+  S.push({t:'claim', id:'C2', tok:2600, say:'蓝队合议：一开始就上微服务，各模块独立部署、独立扩容。'});
+  blue.slice(1).forEach(k => S.push({t:'second', actor:k, target:'C2', tok:600, why:'队内补充：拆开后新人能并行开发', say:'补充一点：服务拆开以后，新招的人可以并行开发，互不阻塞。'}));
+  S.push({t:'crux', tok:900, clash:['C1', 'C2'], why:'红队 C1 vs 蓝队 C2', consensus:'共识：无论哪种架构，CI/CD 与监控先行',
+    say:'红队 C1 对蓝队 C2。共识：无论哪种架构，CI/CD 和监控都要先建好。'});
+
+  S.push({t:'banner', big:'ROUND 1', small:'FIGHT!', round:1});
+  const a1 = act({type:'attack', actor:red[1] || red[0], target:'C2', tool:true,
+    why:'抽 1 人运维=砍 20% 研发', ruling:'证据成立', dmg:40, crit:true, tok:2700,
+    steelman:'微服务确实便于独立扩容和独立部署。', ev:EV('[web] 小团队自建 K8s 运维投入调研（演示数据）', '[read] deploy/ 只有 docker-compose.yml，没有 K8s 清单（演示）'),
+    say:'5 个人里抽 1 个专职做 K8s 运维，等于直接砍掉 20% 的研发产能。早期产品最缺的就是迭代速度。'});
+  act({type:'defend', actor:blue[0], target:'C2', why:'托管 K8s 可降到 0.3 人', ruling:'部分成立', heal:10, tok:2400,
+    say:'可以用托管 K8s，集群运维交给云厂商，人力能降到 0.3 人左右。'});
+  act({type:'attack', actor:blue[1] || blue[0], target:'C1', why:'单体后期拆分代价高', ruling:'模块边界可缓解', dmg:15, tok:2300,
+    steelman:'单体在早期开发最快、调试最简单。', say:'单体长大以后再拆，往往要付出大量重构成本，不如一开始就分开。'});
+  act({type:'defend', actor:red[0], target:'C1', why:'边界划好，拆分只是搬家', ruling:'成立', heal:10, tok:2000,
+    say:'只要一开始按领域划好模块边界，后面拆分就是搬家，不是重写。'});
+  if (red[2]) act({type:'attack', actor:red[2], target:'C2', why:'分布式调试让排错变慢', ruling:'成立', dmg:20, tok:2300,
+    steelman:'服务隔离确实能限制故障范围。', say:'一个请求穿过 5 个服务，出了问题要翻 5 份日志，小团队排错会慢很多。'});
+  if (blue[2]) act({type:'attack', actor:blue[2], target:'C1', why:'单体一处出错，全站一起挂', ruling:'部分成立，可用隔离缓解', dmg:10, tok:2200,
+    steelman:'单体部署确实最简单。', say:'单体只有一个部署单元，一个模块出错，整个服务一起挂。'});
+
+  S.push({t:'banner', big:'ROUND 2', small:'FIGHT!', round:2});
+  const a6 = act({type:'attack', actor:red[0], target:'C2', tool:true, refs:[a1],
+    why:'拆服务后一次发布变多次协调', ruling:'证据成立', dmg:35, crit:true, tok:2900,
+    steelman:'独立部署确实让单个服务发布更快。', ev:EV('[web] 微服务发布协调成本案例（演示数据）', '[read] src/ 内跨模块 import 142 处（演示）'),
+    say:'模块之间互相调用很多，拆成服务以后，一次发布会变成好几次协调发布。'});
+  act({type:'concede', actor:blue[0], target:'C2', refs:[a1, a6], shiftTo:'C1',
+    why:'蓝队认输，有条件改投 C1', edgeWhy:'运维成本 + 发布协调成本', tok:1100,
+    say:'蓝队认输。运维人力和发布协调这两点我们都反驳不了。改为有条件支持 C1：团队超过 15 人再拆。'});
+  S.push({t:'converge', why:'蓝队认输，红队胜', saved:9000, skipped:[], banner:'RED WINS', bannerSmall:'红队胜 · 提前结束',
+    basis:`蓝队队长 ${N(blue[0])} 认输，红队的 C1 存活`,
+    say:'蓝队认输，红队主张的 C1 存活。提前结束，跳过第 3 回合，省下约 9k tokens。'});
+  S.push({t:'final', tok:5400, say:'综合存活论点、两队要点与少数派意见，生成冠军答案，并审计"无因认输"……'});
+  return S;
+}
+const SCRIPT = MODE === 'team' ? buildTeamScript() : buildScript();
+const RESULT = {
+  answer:'先做模块化单体：按领域分模块、共用一个部署单元，CI/CD 和监控先行。团队超过 15 人，或某个模块需要独立扩容时，再把它拆成服务。不要一开始就自建 K8s。',
+  minority:`${N(P.P2)}：如果预计 12 个月内团队翻倍，现在就按服务边界划分模块。`,
+  crux:'你们未来 12 个月的团队规模和流量峰值大概是多少？这决定"什么时候拆"。',
+  single:6200,
+  verdict: MODE === 'team' ? '红队胜' : '由 C1 演化而来',
+};
+
+const ICONS = {
+  search:{pal:{k:OUT,w:'#fff',c:'#4fc3f7'},map:['..kkkk...','.kwwwwk..','kwwccwwk.','kwccccwk.','kwwccwwk.','.kwwwwkk.','..kkkkkkk','.......kk','........k']},
+  flag:{pal:{k:OUT,w:'#fff'},map:['kwwwwww..','kwwwwwww.','kwwwwwww.','kwwwwww..','k........','k........','k........','k........','kk.......']},
+  scales:{pal:{a:'#f5c542'},map:['.....aa.....','aaaaaaaaaaaa','.a...aa...a.','.a...aa...a.','aaa..aa..aaa','aaa..aa..aaa','.....aa.....','.....aa.....','...aaaaaa...']},
+  crown:{pal:{a:'#f5c542',r:'#ff4d6d'},map:['a...a...a','aa.aaa.aa','aaaaaaaaa','aarraarra','aaaaaaaaa']},
+};
+function paint(map, pal, scale, extra){
+  const c = document.createElement('canvas');
+  c.width = map[0].length; c.height = map.length;
+  const g = c.getContext('2d');
+  map.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); } }));
+  (extra || []).forEach(([x, y, ch]) => { g.fillStyle = pal[ch]; g.fillRect(x, y, 1, 1); });
+  c.style.width = c.width * scale + 'px'; c.style.height = c.height * scale + 'px';
+  return c;
+}
+const icon = (k, s) => paint(ICONS[k].map, ICONS[k].pal, s);
+
+/* ============ 背景（程序化像素场景 218×108，放大 4 倍） ============ */
+function mulberry32(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function drawBG(){
+  const c = document.getElementById('bg'); c.width = 218; c.height = 108;
+  const g = c.getContext('2d'), R = mulberry32(11), W = 218;
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+  const sky = ['#110929','#1a0f3a','#28124b','#3c1859','#5a1f64','#7e2c6c'], bayer = [[0,.5],[.75,.25]];
+  for (let y = 0; y < 60; y++) {
+    const t = y / 60 * (sky.length - 1), i = Math.floor(t), f = t - i;
+    for (let x = 0; x < W; x++) px(x, y, f > bayer[y % 2][x % 2] ? sky[Math.min(i + 1, sky.length - 1)] : sky[i]);
+  }
+  for (let i = 0; i < 46; i++) px(Math.floor(R() * W), Math.floor(R() * 34), R() > .7 ? '#ffffff' : '#c9b8ff');
+  for (let y = -8; y <= 8; y++) for (let x = -8; x <= 8; x++) if (x * x + y * y <= 64) px(186 + x, 15 + y, (x + 3) * (x + 3) + (y + 2) * (y + 2) < 6 || (x - 3) * (x - 3) + (y - 3) * (y - 3) < 3 ? '#f1cfa0' : '#ffe7c2');
+  let x = 0;
+  while (x < W) {
+    const w = 6 + Math.floor(R() * 10), h = 8 + Math.floor(R() * 20);
+    g.fillStyle = '#170d2e'; g.fillRect(x, 60 - h, w, h);
+    for (let wy = 60 - h + 2; wy < 56; wy += 3) for (let wx = x + 1; wx < x + w - 1; wx += 2) if (R() < .22) px(wx, wy, R() > .5 ? '#f5c542' : '#4fc3f7');
+    x += w + 1;
+  }
+  g.fillStyle = '#2a1d4a'; g.fillRect(0, 52, W, 21);
+  g.fillStyle = '#4a3680'; g.fillRect(0, 52, W, 1);
+  for (let ax = 6; ax < W; ax += 24) {
+    g.fillStyle = '#140c28'; g.fillRect(ax, 58, 12, 15);
+    for (let yy = 0; yy < 4; yy++) { g.fillRect(ax + 2 - yy + 2, 57 - yy, 8 + (yy < 2 ? 0 : -2) , 1); }
+    g.fillStyle = '#3a2a5e'; g.fillRect(ax + 15, 54, 4, 19);
+  }
+  [['#D97757', 30], ['#a78bfa', 78], ['#3ddc84', 132], ['#4D6BFE', 180]].forEach(([col, bx]) => {
+    g.fillStyle = '#8a7ab8'; g.fillRect(bx - 1, 44, 10, 1);
+    g.fillStyle = col; g.fillRect(bx, 45, 8, 12);
+    g.fillStyle = '#2a1d4a'; g.fillRect(bx + 3, 55, 2, 2);
+  });
+  const rows = [73, 76, 80, 85, 91, 98, 108];
+  for (let y = 73; y < 108; y++) {
+    const r = rows.findIndex(v => y < v);
+    for (let xx = 0; xx < W; xx++) {
+      const col = Math.floor(((xx - 109) / (y - 30)) * 5 + 100);
+      let c1 = (r + col) % 2 ? '#33265c' : '#2a1f4e';
+      const ex = (xx - 109) / 70, ey = (y - 88) / 13;
+      if (ex * ex + ey * ey < 1 && (xx + y) % 2) c1 = '#4b3a85';
+      px(xx, y, c1);
+    }
+  }
+  g.fillStyle = '#6a55b0'; g.fillRect(0, 72, W, 1);
+}
+
+/* ============ 运行时 ============ */
+const $ = s => document.querySelector(s);
+const stage = $('#stage'), arena = $('#arena'), lines = $('#lines');
+let speed = 1, paused = false;
+const state = {tokens:0, budget:60000, saved:0, cred:{}, hp:{}, sup:{}, log:[], edges:[], round:0, lastCredFill:{}};
+const COST_PER_TOK = 0.12 / 31400;
+const fmtK = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const who = k => FIGHTERS[k] || SYS[k];
+
+function fit(){ stage.style.transform = `scale(${Math.min(innerWidth / 1280, innerHeight / 720)})`; }
+addEventListener('resize', fit); fit();
+
+// 截图用：?snap=N 瞬间快进前 N 步后停住（README 截图、视频素材都用它）
+const SNAP = Number(QS.get('snap')) || 0;
+if (SNAP) { speed = 1000; document.documentElement.classList.add('snap'); }
+function sleep(ms){
+  if (SNAP) return Promise.resolve();
+  return new Promise(res => {
+    let left = ms, last = performance.now();
+    const tick = now => { const dt = now - last; last = now; if (!paused) left -= dt * speed; left <= 0 ? res() : requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}
+async function anim(el, kf, dur){ el.animate(kf, {duration: dur / speed, easing:'steps(6)'}); await sleep(dur); }
+
+/* ---- 搭建静态画面 ---- */
+function build(){
+  drawBG();
+  $('#hud').classList.toggle('compact', Math.ceil(TEAM.length / 2) > 2);
+  $('#hud').classList.toggle('team', MODE === 'team');
+  $('#modeLbl').textContent = MODES[MODE] + (WORKSPACE ? ' · 只读' : '');
+  if (WORKSPACE) $('#demoTag').textContent += ` · 📁 ${WORKSPACE}（只读，只输出结论）`;
+  for (const [k, f] of Object.entries(FIGHTERS)) {
+    state.cred[k] = 100;
+    const pl = document.createElement('div');
+    pl.className = 'plate' + (f.flip ? ' r' : ''); pl.id = 'pl-' + k; pl.style.color = f.color;
+    $(f.flip ? '#hudR' : '#hudL').appendChild(pl);
+    pl.innerHTML = `<div class="portrait"></div><div class="pinfo"><div class="pname">${f.name}<span class="cred">CRED <span id="cv-${k}">100</span></span></div><div class="pstat" id="ps-${k}">${f.cls} · 待机</div><div class="bar"><div class="ghost"></div><div class="fill"></div></div></div>`;
+    pl.querySelector('.portrait').appendChild(mascot(f.sprite, 'idle', 2));
+    const el = document.createElement('div');
+    el.className = 'fighter' + (f.flip ? ' flip' : ''); el.id = 'f-' + k;
+    el.style.cssText = `left:${f.x}px;bottom:${f.b}px;--fc:${f.color};z-index:${12 - Math.round(f.b / 40)}`;
+    el.innerHTML = `<div class="shadow"></div><div class="aura">${[14,36,58,80,102].map((l, i) => `<i style="left:${l}px;animation-delay:${i * .15}s"></i>`).join('')}</div><div class="bob" style="animation-delay:${Math.random()}s"></div><div class="ntag">${f.name}</div><div class="status"></div>`;
+    if (MODE === 'team') el.querySelector('.shadow').style.background = TEAMS[f.team].color + '99';
+    const spr = mascot(f.sprite, 'idle', 5); spr.className = 'spr';
+    el.querySelector('.bob').appendChild(spr);
+    arena.appendChild(el);
+    setCred(k, 0);
+  }
+  const board = $('#board');
+  for (const [id, c] of Object.entries(CLAIMS)) {
+    state.hp[id] = 100; state.sup[id] = [c.owner];
+    const [sx, sy] = [[0, 0], [198, 0], [0, 142], [198, 142]][c.slot];
+    const f = FIGHTERS[c.owner];
+    const el = document.createElement('div');
+    el.className = 'card'; el.id = 'card-' + id;
+    el.style.cssText = `left:${sx}px;top:${sy}px;--oc:${f.color}`;
+    el.innerHTML = `<div class="stripe"></div><div class="sup"></div><div class="hd"><span class="cid">${id}</span><span class="lbl ${c.label === '事实' ? 'fact' : ''}">${c.label}</span><span class="chk"></span><span class="own">${f.name}</span></div><div class="txt">${esc(c.text)}</div><div class="hp">${'<i></i>'.repeat(10)}<span class="hpn">100</span></div><div class="stamp">K.O.</div>`;
+    el.addEventListener('mouseenter', () => lines.querySelectorAll(`.ln[data-tgt="${id}"],.ln[data-id="${id}"]`).forEach(l => l.classList.add('hl')));
+    el.addEventListener('mouseleave', () => lines.querySelectorAll('.ln.hl').forEach(l => l.classList.remove('hl')));
+    board.appendChild(el);
+    renderSup(id);
+  }
+  const fl = $('#filters');
+  [['all', 'ALL', '#9a8cc2'], ...Object.entries(FIGHTERS).map(([k, f]) => [k, f.name, f.color])].forEach(([k, n, c]) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (k === 'all' ? ' on' : ''); b.textContent = n; b.style.setProperty('--c', c); b.dataset.k = k;
+    b.onclick = () => { fl.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b)); lines.querySelectorAll('.ln').forEach(l => l.classList.toggle('hide', k !== 'all' && l.dataset.who !== k)); };
+    fl.appendChild(b);
+  });
+  updateMana();
+}
+
+/* ---- HUD ---- */
+function setCred(k, d){
+  state.cred[k] += d;
+  const w = Math.max(0, Math.min(100, state.cred[k] / 120 * 100)) + '%';
+  const pl = $('#pl-' + k);
+  pl.querySelector('.fill').style.width = w; pl.querySelector('.ghost').style.width = w;
+  $('#cv-' + k).textContent = state.cred[k];
+}
+function setStat(k, txt, live){
+  const el = $('#ps-' + k); if (!el) return;
+  el.textContent = FIGHTERS[k].cls + ' · ' + (txt || '待机'); el.classList.toggle('live', !!live);
+}
+function updateMana(){
+  const left = Math.max(0, state.budget - state.tokens), w = left / state.budget * 100 + '%';
+  $('#mana .fill').style.width = w; $('#mana .ghost').style.width = w;
+  $('#manaVal').textContent = `${fmtK(state.tokens)} / ${fmtK(state.budget)} tok · $${(state.tokens * COST_PER_TOK).toFixed(2)}`;
+}
+function addTokens(n){ state.tokens += n; updateMana(); }
+function popAt(parent, x, y, text, cls, rise = 44, dur = 900){
+  const p = document.createElement('div'); p.className = 'pop ' + (cls || ''); p.textContent = text;
+  p.style.left = x + 'px'; p.style.top = y + 'px'; parent.appendChild(p);
+  p.animate([{transform:'translate(-50%,0)', opacity:1}, {transform:`translate(-50%,-${rise}px)`, opacity:0}], {duration: dur / speed, easing:'steps(8)', fill:'forwards'}).finished.then(() => p.remove());
+}
+
+/* ---- 吉祥物姿势：待机两帧交替；攻击 / 受击临时切换 ---- */
+const poseOf = {};
+function setPose(k, pose, ms){
+  poseOf[k] = pose; drawPose($('#f-' + k + ' .spr'), FIGHTERS[k].sprite, pose);
+  if (ms) sleep(ms).then(() => { if (poseOf[k] === pose) setPose(k, 'idle'); });
+}
+setInterval(() => {
+  if (paused) return;
+  for (const k in FIGHTERS) { const p = poseOf[k] || 'idle'; if (p === 'idle' || p === 'idle2') setPose(k, p === 'idle' ? 'idle2' : 'idle'); }
+}, 480);
+
+/* ---- 选手状态（借鉴 Pixel Agents：动画反映真实状态） ---- */
+function setStatus(k, s){
+  const f = $('#f-' + k), st = f.querySelector('.status');
+  f.classList.toggle('charging', s === 'think');
+  st.innerHTML = ''; st.classList.toggle('on', !!s);
+  if (s === 'think') st.innerHTML = '<div class="bubble"><span class="d">.</span><span class="d">.</span><span class="d">.</span></div>';
+  if (s === 'search') { const b = document.createElement('div'); b.className = 'bubble'; b.appendChild(icon('search', 3)); st.appendChild(b); }
+  if (s === 'flag') st.appendChild(icon('flag', 4));
+  if (s === 'zzz') st.innerHTML = '<div class="bubble">Zz</div>';
+  setStat(k, {think:'思考中…', search:'搜索证据', flag:'认输', zzz:'本轮轮空'}[s], !!s);
+}
+
+/* ---- 对话框 ---- */
+function speaker(k, act, ev){
+  const w = who(k), p = $('#dlgPortrait');
+  $('#dlg').style.setProperty('--sc', w.color);
+  p.innerHTML = '';
+  if (FIGHTERS[k]) p.appendChild(mascot(FIGHTERS[k].sprite, 'idle', 4));
+  else if (k === 'judge') p.appendChild(icon('scales', 7));
+  else if (k === 'chair') p.appendChild(icon('crown', 9));
+  else p.innerHTML = '<span class="q">?</span>';
+  $('#dlgName').textContent = w.name;
+  $('#dlgAct').textContent = act || '';
+  $('#dlgEv').textContent = ev || '';
+}
+async function typewriter(text){
+  const el = $('#dlgText');
+  el.innerHTML = '<span class="t"></span><i class="caret"></i>';
+  const t = el.querySelector('.t');
+  if (SNAP) { t.textContent = text; return; }
+  for (const ch of text) { t.textContent += ch; await sleep(24); }
+}
+
+/* ---- 论点卡 ---- */
+const cardEl = id => $('#card-' + id);
+function cardCenter(id){ const [sx, sy] = [[0, 0], [198, 0], [0, 142], [198, 142]][CLAIMS[id].slot]; return {x: 246 + sx + 91, y: 34 + sy + 62}; }
+function fighterPt(k){ const f = FIGHTERS[k]; return {x: f.x + 60, y: 432 - f.b - 55}; }
+function renderHP(id){
+  const hp = Math.max(0, state.hp[id]), el = cardEl(id);
+  el.querySelectorAll('.hp i').forEach((i, n) => i.classList.toggle('off', n >= Math.ceil(hp / 10)));
+  el.querySelector('.hpn').textContent = hp + 'HP';
+}
+function renderSup(id){
+  cardEl(id).querySelector('.sup').innerHTML = state.sup[id].slice(1).map(k => `<i style="--sc:${FIGHTERS[k].color}" title="${FIGHTERS[k].name} 支持"></i>`).join('');
+}
+function ruling(id, text){
+  const c = cardCenter(id), r = document.createElement('div');
+  r.className = 'rul'; r.textContent = '裁：' + text;
+  r.style.left = c.x + 'px'; r.style.top = (c.y + 70) + 'px'; r.style.transform = 'translateX(-50%)';
+  arena.appendChild(r);
+  sleep(1500).then(() => r.remove());
+}
+async function projectile(from, to, color, crit){
+  if (SNAP) return;
+  const p = document.createElement('div'); p.className = 'proj' + (crit ? ' crit' : ''); p.style.setProperty('--pc', color); arena.appendChild(p);
+  const dur = 440 / speed, t0 = performance.now();
+  await new Promise(res => {
+    const tick = now => {
+      const t = Math.min(1, (now - t0) / dur);
+      const x = Math.round((from.x + (to.x - from.x) * t) / 4) * 4, y = Math.round((from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * 50) / 4) * 4;
+      p.style.transform = `translate(${x - 6}px,${y - 6}px)`;
+      const tr = document.createElement('div'); tr.className = 'trail'; tr.style.setProperty('--pc', color); tr.style.transform = p.style.transform;
+      arena.appendChild(tr); setTimeout(() => tr.remove(), 300);
+      t < 1 ? requestAnimationFrame(tick) : res();
+    };
+    requestAnimationFrame(tick);
+  });
+  p.remove(); burst(to, color, crit ? 18 : 10);
+}
+function burst(pt, color, n){
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('div'); s.className = 'spark'; s.style.setProperty('--pc', i % 3 ? color : '#fff'); arena.appendChild(s);
+    const a = Math.random() * Math.PI * 2, d = 30 + Math.random() * 60;
+    s.animate([{transform:`translate(${pt.x}px,${pt.y}px)`, opacity:1}, {transform:`translate(${pt.x + Math.cos(a) * d}px,${pt.y + Math.sin(a) * d}px)`, opacity:0}], {duration: 520 / speed, easing:'steps(6)', fill:'forwards'}).finished.then(() => s.remove());
+  }
+}
+function shake(){ arena.animate([{transform:'translate(0,0)'}, {transform:'translate(-8px,4px)'}, {transform:'translate(8px,-4px)'}, {transform:'translate(-4px,-4px)'}, {transform:'translate(0,0)'}], {duration: 320 / speed, easing:'steps(4)'}); }
+function flashScreen(){ $('#flash').animate([{opacity:.85}, {opacity:0}], {duration: 260 / speed, easing:'steps(3)'}); }
+async function banner(big, small, ms){
+  const b = $('#banner'); b.querySelector('.big').textContent = big; b.querySelector('.small').textContent = small || '';
+  b.classList.add('on');
+  await anim(b.querySelector('.big'), [{transform:'scale(2.4)', opacity:0}, {transform:'scale(1)', opacity:1}], 300);
+  await sleep(ms); b.classList.remove('on');
+}
+async function koCard(id){
+  state.hp[id] = 0; renderHP(id);
+  const el = cardEl(id); el.classList.add('ko');
+  const c = cardCenter(id); burst(c, '#ff4d6d', 22); shake(); flashScreen();
+  await banner('K.O.', `${id} 出局`, 700);
+}
+
+/* ---- 日志（确定性生成，零 token） ---- */
+function addLog(o){
+  state.log.push(o);
+  const d = document.createElement('div');
+  d.className = 'ln new'; d.dataset.id = o.lid || ''; d.dataset.who = o.k || 'sys'; d.dataset.tgt = o.tgt || '';
+  d.style.setProperty('--lc', who(o.k)?.color || '#555');
+  const refs = (o.refs || []).map(r => `<span class="ref" data-ref="${r}">←${r.startsWith('A') ? '#' : ''}${r}</span>`).join('');
+  d.innerHTML = `<div class="r1"><span class="lid">${o.lid ? (o.lid.startsWith('A') ? '#' : '') + o.lid : ''}</span><span class="rd">R${o.rd}</span><span class="tag ${o.tagc}">${o.tag}</span><span class="who" style="color:${who(o.k).color}">${who(o.k).name}</span>${o.tgt ? `<span class="tg">&gt; ${o.tgt}</span>` : ''}<span class="res ${o.resc || ''}">${o.res || ''}</span></div>`
+    + `<div class="r2">${esc(o.why)}${o.ruling ? `<span class="rl">｜${esc(o.ruling)}</span>` : ''}${refs}</div>`
+    + (o.det ? `<div class="det">${o.det}</div>` : '');
+  const filt = $('#filters .chip.on').dataset.k;
+  if (filt !== 'all' && d.dataset.who !== filt) d.classList.add('hide');
+  lines.appendChild(d); lines.scrollTop = lines.scrollHeight;
+}
+function detail(s){
+  const rows = [['论证', s.say]];
+  if (s.steelman) rows.push(['Steelman', s.steelman]);
+  if (s.ev) rows.push(['证据', s.ev]);
+  if (s.ruling) rows.push(['裁判', s.ruling + (s.dmg ? `，伤害 ${s.dmg}${s.crit ? '（暴击：有证据支撑）' : ''}` : s.heal ? `，回复 ${s.heal}` : '')]);
+  rows.push(['消耗', `${fmtK(s.tok)} tok · $${(s.tok * COST_PER_TOK).toFixed(4)}`]);
+  return rows.map(([k, v]) => `<b>${k}</b>${esc(v)}`).join('<br>');
+}
+lines.addEventListener('click', e => {
+  const ref = e.target.closest('.ref');
+  if (ref) {
+    e.stopPropagation();
+    const t = lines.querySelector(`.ln[data-id="${ref.dataset.ref}"]`);
+    if (t) { t.classList.remove('hide', 'flash'); void t.offsetWidth; t.classList.add('flash'); lines.scrollTop = t.offsetTop - lines.clientHeight / 2 + t.offsetHeight / 2; }
+    return;
+  }
+  const ln = e.target.closest('.ln'); if (ln && ln.querySelector('.det')) ln.classList.toggle('open');
+});
+function addEdge(s){
+  const froms = [...new Set(s.refs.map(r => SCRIPT.find(x => x.id === r)?.actor).filter(Boolean))];
+  froms.forEach(f => state.edges.push({from:f, to:s.actor, on:s.edgeOn || s.target, why:s.edgeWhy, chain:`${s.refs.map(r => '#' + r).join(' ')} → #${s.id}`}));
+  $('#edges').innerHTML = state.edges.map(e => `<div class="edge"><div class="e1"><span style="color:${FIGHTERS[e.from].color}">${FIGHTERS[e.from].name}</span><span class="ar">=&gt;</span><span style="color:${FIGHTERS[e.to].color}">${FIGHTERS[e.to].name}</span><span class="on">${e.on}</span></div><div class="e2">${esc(e.why)} · ${e.chain}</div></div>`).join('');
+}
+
+/* ---- 比赛步骤 ---- */
+const STEP = {
+  async question(){
+    speaker('you', '提问', WORKSPACE ? `📁 ${WORKSPACE} · 只读` : '');
+    await typewriter(QUESTION);
+    addLog({k:'you', rd:0, tag:'问', tagc:'q', why:QUESTION});
+    await sleep(900);
+  },
+  async banner(s){
+    state.round = s.round; $('#roundLbl').textContent = s.big;
+    await banner(s.big, s.small, 900);
+  },
+  async claim(s){
+    const c = CLAIMS[s.id], k = c.owner;
+    setStatus(k, 'think'); await sleep(650); setStatus(k, '');
+    cardEl(s.id).classList.add('in');
+    speaker(k, `立 ${s.id}`);
+    addTokens(s.tok);
+    addLog({k, rd:0, lid:s.id, tag:'立', tagc:'clm', why:c.short, res:`[${c.label}]`, det:detail({say:s.say, tok:s.tok})});
+    await typewriter(s.say); await sleep(450);
+  },
+  async second(s){
+    const k = s.actor;
+    setStatus(k, 'think'); await sleep(650); setStatus(k, '');
+    state.sup[s.target].push(k); renderSup(s.target);
+    speaker(k, `附议 ${s.target}`);
+    addTokens(s.tok);
+    addLog({k, rd:0, tag:'立', tagc:'clm', tgt:s.target, why:s.why, res:'[附议]', det:detail({say:s.say, tok:s.tok})});
+    await typewriter(s.say); await sleep(450);
+  },
+  async crux(s){
+    speaker('judge', '分歧提取');
+    s.clash.forEach(id => cardEl(id).classList.add('clash'));
+    if (CLAIMS.C4) { const ck = cardEl('C4').querySelector('.chk'); ck.textContent = '待验证'; ck.classList.add('on'); }
+    const cs = $('#consensus'); cs.textContent = s.consensus; cs.classList.add('in');
+    addTokens(s.tok);
+    addLog({k:'judge', rd:0, tag:'裁', tagc:'jdg', why:s.why, res:'1 共识', resc:'ok', det:detail({say:s.say, tok:s.tok})});
+    await typewriter(s.say); await sleep(700);
+    s.clash.forEach(id => cardEl(id).classList.remove('clash'));
+  },
+  async act(s){
+    const k = s.actor, f = FIGHTERS[k], fe = $('#f-' + k);
+    setStatus(k, 'think'); await sleep(550);
+    if (s.tool) { setStatus(k, 'search'); await sleep(750); }
+    setStatus(k, '');
+    const label = {attack:'攻', defend:'守', concede:'让', shift:'改'}[s.type];
+    speaker(k, `${label} > ${s.target}`, s.ev ? '🔍 ' + s.ev : '');
+    await typewriter(s.say);
+    addTokens(s.tok);
+    const base = {k, rd:state.round, lid:s.id, tgt:s.target, why:s.why + (s.ev ? ' [web]' : ''), ruling:s.ruling, refs:s.refs, det:detail(s)};
+    if (s.type === 'attack') {
+      setPose(k, 'atk', 650);
+      fe.animate([{transform:'translateX(0)'}, {transform:`translateX(${f.flip ? -28 : 28}px)`}, {transform:'translateX(0)'}], {duration: 300 / speed, easing:'steps(3)'});
+      await projectile(fighterPt(k), cardCenter(s.target), f.color, s.crit);
+      state.hp[s.target] -= s.dmg; renderHP(s.target);
+      const ce = cardEl(s.target); ce.classList.remove('hit'); void ce.offsetWidth; ce.classList.add('hit');
+      const c = cardCenter(s.target);
+      popAt(arena, c.x, c.y - 30, '-' + s.dmg, 'dmg');
+      if (s.crit) { shake(); flashScreen(); popAt(arena, c.x, c.y - 70, 'CRITICAL!', 'crit', 30, 1200); }
+      const owner = CLAIMS[s.target].owner; setPose(owner, 'hurt', 700); $('#f-' + owner).classList.remove('hurt'); void $('#f-' + owner).offsetWidth; $('#f-' + owner).classList.add('hurt');
+      if (s.verifies) { const ck = cardEl(s.verifies).querySelector('.chk'); ck.textContent = '已验证'; ck.classList.add('ok'); }
+      addLog({...base, tag:'攻', tagc:'atk', res:`-${s.dmg}${s.crit ? ' 暴击' : ''}`, resc:'dmg'});
+      ruling(s.target, s.ruling);
+    }
+    if (s.type === 'defend') {
+      const ce = cardEl(s.target); ce.classList.add('shield');
+      state.hp[s.target] += s.heal; renderHP(s.target);
+      const c = cardCenter(s.target); popAt(arena, c.x, c.y - 30, '+' + s.heal, 'heal');
+      addLog({...base, tag:'守', tagc:'def', res:`+${s.heal}`, resc:'heal'});
+      ruling(s.target, s.ruling);
+      sleep(900).then(() => ce.classList.remove('shield'));
+    }
+    if (s.type === 'concede') {
+      setStatus(k, 'flag'); setPose(k, 'hurt');
+      addLog({...base, tag:'让', tagc:'con', res:`${s.target} K.O.`, resc:'ko'});
+      addEdge(s);
+      await koCard(s.target);
+      if (s.shiftTo) { state.sup[s.shiftTo].push(k); renderSup(s.shiftTo); }
+      setStatus(k, ''); setPose(k, 'idle');
+    }
+    if (s.type === 'shift') {
+      setStatus(k, 'flag');
+      addLog({...base, tag:'改', tagc:'con', res:`→ ${s.target}`, resc:'ok'});
+      addEdge(s);
+      state.sup[s.target].push(k); renderSup(s.target);
+      await sleep(900); setStatus(k, '');
+    }
+    for (const [ck, d] of Object.entries(s.cred || {})) setCred(ck, d);
+    await sleep(800);
+  },
+  async skip(s){
+    setStatus(s.actor, 'zzz'); $('#f-' + s.actor).classList.add('dim');
+    speaker('judge', '稀疏化');
+    state.saved += s.saved;
+    popAt(stage, 640, 70, `+${fmtK(s.saved)} SAVED`, 'save', 20, 1400);
+    addLog({k:s.actor, rd:state.round, tag:'略', tagc:'skp', why:s.why, res:`+${fmtK(s.saved)} tok`, resc:'save', det:`<b>规则</b>S²-MAD：与他人立场重合的选手本回合不发言<br><b>节省</b>约 ${fmtK(s.saved)} tok`});
+    await typewriter(s.say); await sleep(600);
+  },
+  async converge(s){
+    speaker('judge', '收敛判定');
+    state.saved += s.saved;
+    popAt(stage, 640, 70, `+${fmtK(s.saved)} SAVED`, 'save', 20, 1400);
+    addLog({k:'judge', rd:state.round, tag:'裁', tagc:'jdg', why:s.why, res:`+${fmtK(s.saved)} tok`, resc:'save', det:`<b>依据</b>${esc(s.basis)}<br><b>节省</b>跳过 ROUND 3，约 ${fmtK(s.saved)} tok`});
+    await typewriter(s.say);
+    s.skipped.forEach(k => { $('#f-' + k).classList.remove('dim'); setStatus(k, ''); });
+    await banner(s.banner || 'FINISH', s.bannerSmall || '立场收敛 · 提前结束', 900);
+  },
+  async final(s){
+    speaker('chair', '综合');
+    addTokens(s.tok);
+    addLog({k:'chair', rd:state.round, tag:'终', tagc:'jdg', why:'综合冠军答案 · 审计：无因认输 0 次', res:'DONE', resc:'ok', det:detail({say:s.say, tok:s.tok})});
+    await typewriter(s.say); await sleep(700);
+    showResult();
+  },
+};
+
+/* ---- 结果页 ---- */
+function traceFor(id){
+  const hits = state.log.filter(l => l.tgt === id && l.tag === '攻').map(l => '#' + l.lid);
+  const con = state.log.find(l => l.tgt === id && l.tag === '让');
+  if (con) return `← #${con.lid} ${who(con.k).name} 认输 ← ` + con.refs.map(r => '#' + r).join(' ');
+  const sup = state.sup[id].slice(1).map(k => FIGHTERS[k].name);
+  return (hits.length ? `扛住 ${hits.join(' ')}` : CLAIMS[id].label === '事实' ? '事实，已用证据验证' : '未被攻击') + (sup.length ? ` · ${sup.join('、')} 转投` : '');
+}
+function showResult(){
+  const alive = Object.keys(CLAIMS).filter(id => state.hp[id] > 0), dead = Object.keys(CLAIMS).filter(id => state.hp[id] <= 0);
+  const item = id => `<div class="ci" style="--oc:${FIGHTERS[CLAIMS[id].owner].color}"><div class="t">${id} ${state.hp[id] > 0 ? state.hp[id] + 'HP ' : ''}· ${esc(CLAIMS[id].short)}</div><div class="tr">${esc(traceFor(id))}</div></div>`;
+  const mvp = Object.keys(FIGHTERS).sort((a, b) => state.cred[b] - state.cred[a])[0];
+  const r = $('#result');
+  r.innerHTML = `<div class="actions"><button class="btn" id="bExport2">EXPORT .MD</button><button class="btn" id="bReplay">REPLAY</button></div>
+    <h1>CHAMPION ANSWER</h1><div class="sub">冠军答案 · ${MODES[MODE]} · ${RESULT.verdict} · 主席模型综合${WORKSPACE ? ` · 📁 ${esc(WORKSPACE)} 只读：读取 37 个文件，写入 0 次（演示）` : ''} · 右侧日志可逐条追溯</div>
+    <div class="champ">${esc(RESULT.answer)}</div>
+    <div class="cols"><div class="col"><h4 class="ok">SURVIVED · 存活论点</h4>${alive.map(item).join('')}</div>
+    <div class="col"><h4 class="bad">K.O. · 淘汰论点</h4>${dead.map(item).join('')}</div></div>
+    <div class="notes"><div class="note"><b>MINORITY · 少数派保留</b>${esc(RESULT.minority)}</div><div class="note"><b>YOUR CALL · 需要你判断</b>${esc(RESULT.crux)}</div></div>
+    <div class="stats">
+      <div class="st"><div class="v">${fmtK(state.tokens)}</div><div class="k">tokens · $${(state.tokens * COST_PER_TOK).toFixed(2)}</div></div>
+      <div class="st"><div class="v">×${(state.tokens / RESULT.single).toFixed(1)}</div><div class="k">相对单模型作答</div></div>
+      <div class="st"><div class="v" style="color:var(--green)">+${fmtK(state.saved)}</div><div class="k">轮空 + 提前收敛节省</div></div>
+      <div class="st mvp"><div class="v">${FIGHTERS[mvp].name}</div><div class="k">MVP · CRED ${state.cred[mvp]}</div></div>
+    </div>`;
+  r.classList.add('on');
+  $('#bExport2').onclick = exportMd; $('#bReplay').onclick = () => location.reload();
+  Object.keys(FIGHTERS).forEach(k => setStat(k, k === mvp ? 'MVP' : '赛后'));
+  $('#roundLbl').textContent = 'RESULT';
+}
+
+/* ---- 导出 battle-log.md ---- */
+function exportMd(){
+  const pad = (s, n) => { s = String(s); let w = 0; for (const ch of s) w += ch.charCodeAt(0) > 255 ? 2 : 1; return s + ' '.repeat(Math.max(0, n - w)); };
+  const out = [`# Battle Log · ${QUESTION}`, `模式 ${MODES[MODE]}${WORKSPACE ? ` | 文件夹 ${WORKSPACE}（只读）` : ''}`, `选手 ${Object.values(FIGHTERS).map(f => (MODE === 'team' ? (f.team === 'red' ? '红·' : '蓝·') : '') + f.name).join(' · ')} | 裁判 JUDGE | ${fmtK(state.tokens)} tok · $${(state.tokens * COST_PER_TOK).toFixed(2)}`, ''];
+  state.log.forEach(l => {
+    const id = l.lid ? (l.lid.startsWith('A') ? '#' : '') + l.lid : '';
+    const refs = (l.refs || []).length ? '  ←' + l.refs.map(r => (r.startsWith('A') ? '#' : '') + r).join(' ') : '';
+    out.push(`${pad(id, 4)} R${l.rd} ${l.tag} ${pad(who(l.k).name, 9)}${pad(l.tgt ? '> ' + l.tgt : '', 6)}${pad(l.why, 38)}${l.res ? '→ ' + l.res : ''}${l.ruling ? '｜' + l.ruling : ''}${refs}`);
+  });
+  out.push('', '## 说服链');
+  state.edges.forEach(e => out.push(`${pad(FIGHTERS[e.from].name, 9)} => ${pad(FIGHTERS[e.to].name, 9)} ${e.on}  ${pad(e.why, 26)} ${e.chain}`));
+  out.push('', '## 结论溯源');
+  Object.keys(CLAIMS).forEach(id => out.push(`${id} ${state.hp[id] > 0 ? '✓ ' + state.hp[id] + 'HP' : '✗'}  ${traceFor(id)}`));
+  $('#mdOut').textContent = out.join('\n');
+  $('#modal').classList.add('on');
+}
+$('#bExport').onclick = exportMd;
+$('#bClose').onclick = () => $('#modal').classList.remove('on');
+$('#bCopy').onclick = () => navigator.clipboard?.writeText($('#mdOut').textContent).then(() => { $('#bCopy').textContent = 'COPIED'; setTimeout(() => $('#bCopy').textContent = 'COPY', 1200); }).catch(() => {});
+
+/* ---- 控制 ---- */
+function togglePause(){
+  paused = !paused; $('#bPause').textContent = paused ? 'PLAY' : 'PAUSE';
+  // 暂停时：循环动画（待机、光标）冻结；一次性特效直接播完，避免白屏/飘字卡在半空
+  document.getAnimations().forEach(a => {
+    if (!paused) { if (a.playState === 'paused') a.play(); return; }
+    a.effect.getComputedTiming().iterations === Infinity ? a.pause() : a.finish();
+  });
+}
+$('#bPause').onclick = togglePause;
+$('#bSpeed').onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; $('#bSpeed').textContent = speed + 'X'; };
+$('#bReset').onclick = () => location.reload();
+$('#bTeam').onclick = () => { location.href = 'mascots.html?' + new URLSearchParams({team:TEAM.join(','), mode:MODE, dir:WORKSPACE}); };
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); togglePause(); } if (e.key === 'r' || e.key === 'R') location.reload(); });
+
+/* ---- 开始 ---- */
+async function run(){
+  if (!SNAP) await banner('CRUX ARENA', 'AI 先打一架，再给你答案', 1300);
+  for (const [i, s] of SCRIPT.entries()) {
+    if (SNAP && i >= SNAP) { $('#banner').classList.remove('on'); return; }
+    await STEP[s.t](s);
+  }
+}
+build();
+(document.fonts?.ready || Promise.resolve()).then(() => setTimeout(run, 300));
+</script>
+</body>
+</html>

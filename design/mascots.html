@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crux Arena Fighters</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@vp-tw/cjk-web-fonts-fusion-pixel-font@0.0.1/dist/12px/proportional/zh_hans/Fusion-Pixel-12px-Proportional-Simplified-Chinese.css" rel="stylesheet">
+<style>
+:root{--bg:#0b0816;--panel:#16112a;--line:#3b2f63;--ink:#f4ecff;--dim:#9a8cc2;--gold:#f5c542;
+  --px:'Press Start 2P',monospace;--zh:'Fusion Pixel 12px Proportional Simplified Chinese','Press Start 2P',monospace}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--ink);font-family:var(--zh);font-size:12px;padding:24px 16px 96px;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px),radial-gradient(ellipse at 50% 0,#2a1650,#0b0816 70%);background-attachment:fixed}
+canvas{image-rendering:pixelated;display:block}
+header{text-align:center;margin-bottom:22px}
+h1{margin:0;font-family:var(--px);font-size:22px;color:var(--gold);text-shadow:3px 3px 0 #7a3b00}
+.sub{margin-top:10px;color:var(--dim)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;max-width:1240px;margin:0 auto;align-items:start}
+@media (max-width:900px){main{grid-template-columns:1fr}#detail{position:static!important}}
+.group h2{margin:0 0 10px;font-family:var(--px);font-size:10px;color:var(--dim);display:flex;align-items:center;gap:10px}
+.group h2::after{content:'';flex:1;height:3px;background:var(--line)}
+.group+.group{margin-top:22px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.tile{position:relative;padding:10px 6px 8px;background:#120d24;border:3px solid #000;box-shadow:0 0 0 3px var(--line);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:transform .08s steps(2)}
+.tile:hover,.tile.focus{box-shadow:0 0 0 3px var(--c);transform:translateY(-3px)}
+.tile.sel{background:#1f1640;box-shadow:0 0 0 3px var(--c),0 0 0 6px #000,0 0 0 9px var(--c)}
+.tile .nm{font-family:var(--px);font-size:8px;color:var(--c)}
+.tile .zh{color:var(--dim);margin-top:-2px}
+.tile .badge{position:absolute;top:-10px;right:-8px;display:none;font-family:var(--px);font-size:8px;color:#000;background:var(--c);border:2px solid #000;padding:3px 5px}
+.tile.sel .badge{display:block}
+#modes{max-width:1240px;margin:0 auto 22px}
+.mrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.mode{text-align:left;padding:10px 12px;background:#120d24;border:3px solid #000;box-shadow:0 0 0 3px var(--line);color:var(--ink);font-family:var(--zh);font-size:12px;cursor:pointer}
+.mode b{display:block;font-family:var(--px);font-size:9px;font-weight:normal;color:var(--gold);margin-bottom:6px}
+.mode span{color:var(--dim);line-height:16px}
+.mode i{font-style:normal;font-family:var(--px);font-size:7px;color:var(--dim);margin-left:6px}
+.mode.on{background:#22183f;box-shadow:0 0 0 3px var(--gold)}
+.mode:disabled{opacity:.45;cursor:not-allowed}
+.ws{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+.ws label{font-family:var(--px);font-size:8px;color:var(--dim)}
+.ws input{flex:1;min-width:220px;background:#0b0816;color:var(--ink);border:3px solid #000;box-shadow:0 0 0 2px var(--line);padding:8px 10px;font-family:var(--zh);font-size:12px}
+.lock{font-family:var(--px);font-size:7px;color:#000;background:#7ae582;border:2px solid #000;padding:5px 7px}
+#detail{position:sticky;top:16px;background:var(--panel);border:3px solid #000;box-shadow:0 0 0 3px var(--c,var(--line));padding:16px}
+#bigWrap{display:grid;place-items:center;height:230px;background:linear-gradient(#1a1036 0 70%,#2a1f4e 70%);border:3px solid #000}
+#dName{margin-top:14px;font-family:var(--px);font-size:16px;color:var(--c)}
+#dMeta{margin-top:8px;color:var(--dim)}
+#dIdea{margin-top:10px;line-height:18px;min-height:54px}
+#dPoses{display:flex;gap:8px;margin-top:12px}
+#dPoses div{text-align:center;color:var(--dim)}
+#dPoses canvas{background:#0b0816;border:2px solid #000;margin-bottom:4px}
+.note{margin-top:12px;padding-top:10px;border-top:2px dashed var(--line);color:var(--dim);line-height:16px}
+#bar{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;gap:10px;padding:12px 16px;background:#0e0920;border-top:3px solid #000;box-shadow:0 -3px 0 var(--line)}
+#bar .lbl{font-family:var(--px);font-size:8px;color:var(--dim);white-space:nowrap}
+#slots{display:flex;gap:6px;flex:1;min-width:0;overflow:hidden}
+.slot{width:52px;height:46px;flex:none;display:grid;place-items:center;background:#16112a;border:2px dashed var(--line)}
+.slot.on{border:2px solid var(--c);background:#1f1640}
+.btn{font-family:var(--px);font-size:10px;color:#000;background:var(--gold);border:3px solid #000;box-shadow:0 0 0 2px #7a3b00;padding:10px 14px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn[aria-disabled=true]{opacity:.4;pointer-events:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>SELECT YOUR FIGHTERS</h1>
+  <div class="sub">选 2–6 名 AI 上场 · 悬停预览，点击选择 · 所有形象均为原创像素同人，与各厂商无关联</div>
+</header>
+<section id="modes">
+  <div class="mrow" id="modeCards"></div>
+  <div class="ws">
+    <label for="dir">FOLDER · 文件夹（可选）</label>
+    <input id="dir" placeholder="例如 D:\code\my-saas；留空就只讨论问题，不读文件" spellcheck="false">
+    <span class="lock">READ-ONLY · 只读，只输出结论</span>
+  </div>
+</section>
+<main>
+  <div>
+    <section class="group"><h2>GLOBAL · 海外</h2><div class="tiles" id="g-intl"></div></section>
+    <section class="group"><h2>CHINA · 国内</h2><div class="tiles" id="g-cn"></div></section>
+  </div>
+  <aside id="detail">
+    <div id="bigWrap"></div>
+    <div id="dName"></div>
+    <div id="dMeta"></div>
+    <div id="dIdea"></div>
+    <div id="dPoses"></div>
+    <div class="note">24×20 像素 · 4 个姿势：待机 A / 待机 B / 攻击 / 受击。正式版用 LibreSprite 精修成 sprite sheet，并加入 思考 / 搜索 / 认输 / 胜利。</div>
+  </aside>
+</main>
+<div id="bar">
+  <span class="lbl">TEAM</span>
+  <div id="slots"></div>
+  <a class="btn" id="go" href="arena-mockup.html">FIGHT!</a>
+</div>
+<script src="mascots.js"></script>
+<script>
+const MAX = 6, POSES = [['idle', '待机 A'], ['idle2', '待机 B'], ['atk', '攻击'], ['hurt', '受击']];
+const tiles = {};
+const QS = new URLSearchParams(location.search);
+const MODE_LIST = [
+  {k:'ffa',     name:'FFA 混战',       desc:'各自立论、自由攻守，适合开放问题', ok:true},
+  {k:'team',    name:'TEAM 红 vs 蓝',  desc:'单号进红队、双号进蓝队，适合二选一', ok:true},
+  {k:'king',    name:'KING 攻擂',      desc:'擂主守方案，其他人轮流挑刺'},
+  {k:'bracket', name:'BRACKET 淘汰赛', desc:'候选项两两对决，决出冠军'},
+  {k:'quick',   name:'QUICK 速决',     desc:'只盲答 + 投票，最省 token'},
+  {k:'boss',    name:'BOSS 讨伐',      desc:'文件夹专用：一起找问题、互相复核'},
+];
+let mode = MODE_LIST.some(m => m.ok && m.k === QS.get('mode')) ? QS.get('mode') : 'ffa';
+const dirInput = document.getElementById('dir');
+dirInput.value = QS.get('dir') || '';
+dirInput.addEventListener('input', () => renderTeam());
+for (const m of MODE_LIST) {
+  const b = document.createElement('button');
+  b.className = 'mode'; b.dataset.k = m.k; b.disabled = !m.ok;
+  b.innerHTML = `<b>${m.name}${m.ok ? '' : '<i>SOON</i>'}</b><span>${m.desc}</span>`;
+  b.onclick = () => { mode = m.k; renderTeam(); };
+  document.getElementById('modeCards').appendChild(b);
+}
+const teamColor = i => i % 2 ? '#4cc9f0' : '#ff4d6d';
+const picked = (() => { const t = [...new Set((new URLSearchParams(location.search).get('team') || '').split(','))].filter(k => ROSTER.some(r => r.kind === k)).slice(0, MAX); return t.length ? t : ['crab', 'bot', 'star', 'whale']; })();
+let focus = 'crab', frame = 0;
+const bySlug = Object.fromEntries(ROSTER.map(r => [r.kind, r]));
+
+for (const r of ROSTER) {
+  const t = document.createElement('div');
+  t.className = 'tile'; t.style.setProperty('--c', r.color); t.tabIndex = 0;
+  const c = mascot(r.kind, 'idle', 4);
+  t.append(c);
+  t.insertAdjacentHTML('beforeend', `<div class="nm">${r.name}</div><div class="zh">${r.zh}</div><div class="badge"></div>`);
+  t.addEventListener('mouseenter', () => setFocus(r.kind));
+  t.addEventListener('focus', () => setFocus(r.kind));
+  t.addEventListener('click', () => toggle(r.kind));
+  t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r.kind); } });
+  document.getElementById('g-' + r.region).appendChild(t);
+  tiles[r.kind] = {el: t, canvas: c};
+}
+
+const big = mascot('crab', 'idle', 10);
+document.getElementById('bigWrap').appendChild(big);
+
+function setFocus(kind){
+  focus = kind; frame = 0;
+  const r = bySlug[kind], d = document.getElementById('detail');
+  d.style.setProperty('--c', r.color);
+  Object.values(tiles).forEach(t => t.el.classList.remove('focus')); tiles[kind].el.classList.add('focus');
+  document.getElementById('dName').textContent = r.name;
+  document.getElementById('dMeta').textContent = `${r.zh} · ${r.maker}`;
+  document.getElementById('dIdea').textContent = r.idea;
+  const ps = document.getElementById('dPoses'); ps.innerHTML = '';
+  for (const [p, label] of POSES) { const w = document.createElement('div'); w.append(mascot(kind, p, 3), label); ps.appendChild(w); }
+  drawPose(big, kind, 'idle');
+}
+function toggle(kind){
+  const i = picked.indexOf(kind);
+  if (i >= 0) picked.splice(i, 1); else if (picked.length < MAX) picked.push(kind);
+  renderTeam();
+}
+function renderTeam(){
+  for (const [k, t] of Object.entries(tiles)) {
+    const i = picked.indexOf(k);
+    t.el.classList.toggle('sel', i >= 0);
+    const b = t.el.querySelector('.badge');
+    b.textContent = i < 0 ? '' : mode === 'team' ? (i % 2 ? 'B' : 'R') + (Math.floor(i / 2) + 1) : 'P' + (i + 1);
+    b.style.background = mode === 'team' && i >= 0 ? teamColor(i) : '';
+  }
+  const slots = document.getElementById('slots'); slots.innerHTML = '';
+  for (let i = 0; i < MAX; i++) {
+    const s = document.createElement('div'); s.className = 'slot';
+    if (picked[i]) { s.classList.add('on'); s.style.setProperty('--c', mode === 'team' ? teamColor(i) : bySlug[picked[i]].color); s.append(mascot(picked[i], 'idle', 2)); }
+    slots.appendChild(s);
+  }
+  const go = document.getElementById('go');
+  go.setAttribute('aria-disabled', picked.length < 2);
+  const dir = dirInput.value.trim();
+  go.href = 'arena-mockup.html?' + new URLSearchParams({team:picked.join(','), mode, ...(dir ? {dir} : {})});
+  document.querySelectorAll('.mode').forEach(b => b.classList.toggle('on', b.dataset.k === mode));
+}
+
+// 待机两帧交替；悬停的角色在大图里循环演示全部姿势
+const BIG_SEQ = ['idle', 'idle2', 'idle', 'idle2', 'atk', 'atk', 'hurt', 'hurt'];
+setInterval(() => {
+  frame++;
+  for (const [k, t] of Object.entries(tiles)) drawPose(t.canvas, k, k === focus ? (frame % 2 ? 'atk' : 'idle2') : (frame % 2 ? 'idle2' : 'idle'));
+  drawPose(big, focus, BIG_SEQ[frame % BIG_SEQ.length]);
+}, 450);
+
+setFocus('crab'); renderTeam();
+</script>
+</body>
+</html>
