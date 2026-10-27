@@ -12,6 +12,8 @@
 [![Status](https://img.shields.io/badge/status-Phase%200%20%E2%80%A2%20engine%20ready-a78bfa?style=flat-square)](PLAN.md)
 [![Tests](https://img.shields.io/badge/tests-23%20passing-4cc9f0?style=flat-square)](#-快速开始)
 
+### [▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/)
+
 [English](#-english) · [完整方案](PLAN.md) · [快速开始](#-快速开始)
 
 <img src="docs/assets/arena-battle.png" alt="Crux Arena 对战画面：论点卡、像素吉祥物、实时战斗日志" width="100%">
@@ -43,7 +45,9 @@ Crux Arena 把这件事变成一场比赛：
 </tr>
 </table>
 
-> 画面目前是 [design/](design) 里的可交互原型（脚本回放）。直接用浏览器打开 `design/mascots.html` 就能选人开打，不需要任何构建。
+> **[▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/)**：选人、选模式、开打，全程在浏览器里。也可以[直接看一场演示赛](https://jason-zhang-xiquan.github.io/crux-arena/design/arena-mockup.html)。
+>
+> 画面目前是 [design/](design) 里的可交互原型（脚本回放），本地用浏览器打开 `design/mascots.html` 也能玩，不需要任何构建。空格暂停，R 重来，右上角可调倍速。
 
 ## 🧠 一场比赛怎么打
 
@@ -172,7 +176,7 @@ A pixel-art fighting-game arena where Claude, GPT, Gemini, DeepSeek, Doubao, Kim
 npm install && npm run demo && npm test
 ```
 
-Open `design/mascots.html` in a browser to pick fighters and watch a scripted match. Mascots are original fan art, not affiliated with any vendor.
+**[▶ Play the live demo](https://jason-zhang-xiquan.github.io/crux-arena/)** — pick fighters and watch a scripted match in your browser (or open `design/mascots.html` locally). Mascots are original fan art, not affiliated with any vendor.
 
 ## License
 
