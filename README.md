@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-f5c542?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2023.6-3ddc84?style=flat-square)](package.json)
 [![Status](https://img.shields.io/badge/status-Phase%200%20%E2%80%A2%20engine%20ready-a78bfa?style=flat-square)](PLAN.md)
-[![Tests](https://img.shields.io/badge/tests-23%20passing-4cc9f0?style=flat-square)](#-快速开始)
+[![Tests](https://img.shields.io/badge/tests-26%20passing-4cc9f0?style=flat-square)](#-快速开始)
 
 ### [▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/)
 
@@ -32,6 +32,21 @@ Crux Arena 把这件事变成一场比赛：
 - **好看**：每个论点是一张有血条的卡片，质疑是攻击、反驳是格挡、认输时论点卡碎裂 K.O.。13 个 AI 各有一只原创像素吉祥物。
 - **可追溯**：每一次胜负都能追到具体哪一步、哪条理由。战报一行一个动作，短到可以直接贴进群里。
 - **省 token**：只在分歧上打、只传压缩状态、立场重复的选手轮空、观点一收敛就收工。Token 预算做成画面上的 **MANA 条**，花了多少一目了然。
+
+## 🖥️ 桌面版：快捷键一按，小 AI 在桌面上打架
+
+1. 按 **`Ctrl+Alt+Space`**（被占用时自动换成 `Ctrl+Shift+Space`，托盘里可以看到当前快捷键），弹出输入框。
+2. 写问题，可选一个**文件夹**（只读）、**模式**、**上场选手**（2–6 名，会记住上次的选择）。
+3. `Ctrl+Enter` 开打：小 AI 们站在**任务栏上方**的透明窗口里打架，空白处鼠标可以穿透，不挡你干活。
+4. 打完弹出**冠军答案卡片**：复制答案、查看战报、打开存档。每场都存成 `events.jsonl` + `battle-log.md`。
+
+<img src="docs/assets/desktop-launcher.png" alt="桌面版输入框" width="56%">
+
+<img src="docs/assets/desktop-battle.png" alt="桌面版：小 AI 在任务栏上方组队对战" width="100%">
+
+<img src="docs/assets/desktop-result.png" alt="桌面版：冠军答案卡片" width="100%">
+
+> 目前用的是**演示大脑**（规则驱动，还没接真实模型），所以对战内容是演示剧本；但文件夹会被真实地只读侦察，画面也完全由引擎事件驱动。接入模型时只替换"大脑"这一层。
 
 ## 🎮 看看效果
 
@@ -125,8 +140,14 @@ npm install
 ```
 
 ```bash
-npm run demo          # 用脚本化大脑跑一场演示赛，输出 matches/<id>/events.jsonl 和 battle-log.md
-npm test              # 引擎 + 只读文件夹工具的测试
+npm run desktop            # 桌面版：托盘常驻，快捷键唤出
+npm run desktop:selftest   # 自测：自动开打一场并截图
+```
+
+```bash
+npm run crux -- fight "该不该拆微服务？" --team claude,doubao,kimi --mode team --dir .
+npm run demo               # 固定剧本演示赛（和网页原型同一场）
+npm test                   # 引擎、文件夹工具、本地开打的测试
 npm run typecheck
 ```
 
@@ -140,9 +161,11 @@ npm run crux -- ws . grep "WHY_LIMIT"                          # 只读：搜索
 
 ```text
 packages/
-  engine/      事件 schema · 状态推导 · 引擎状态机 · 规则 · battle-log 生成器 · 脚本化大脑
+  engine/      事件 schema · 状态推导 · 引擎状态机 · 规则 · battle-log 生成器 · 演示大脑
   workspace/   只读文件夹工具（沙箱、屏蔽、预算、证据柜、审计）
-  cli/         crux 命令行
+  cli/         crux 命令行 + 本地开打（CLI 和桌面版共用）
+  desktop/     Electron 桌面版：托盘、全局快捷键、输入框、任务栏上方的竞技场
+  sprites/     13 个吉祥物的像素精灵（网页原型和桌面版共用）
 design/        像素竞技场原型、选人界面、吉祥物精灵（纯 HTML，打开即用）
 PLAN.md        完整方案：调研、机制、日志规范、视觉、路线图
 ```
@@ -150,8 +173,9 @@ PLAN.md        完整方案：调研、机制、日志规范、视觉、路线�
 ## 🗺️ 路线图
 
 - [x] **Phase 0**：引擎状态机、事件 schema、battle-log 生成器、只读文件夹工具、CLI、测试
+- [x] **桌面版**：快捷键唤出、任务栏上方的事件驱动竞技场、冠军答案卡片、文件夹只读侦察、存档、自测截图
+- [ ] 桌面版回放、设置页（自定义快捷键）、安装包
 - [ ] 接入真实模型（OpenRouter / 各家直连 / Ollama）+ 评测：单模型 vs 多数投票 vs 竞技场
-- [ ] **Phase 1**：PixiJS 正式版画面，接实时事件流，回放播放器
 - [ ] **Phase 2**：精修精灵与音效、攻擂 / 淘汰赛 / 速决 / 讨伐 BOSS、跨比赛"说服力"排行榜
 - [ ] **Phase 3**：`npx crux-arena` 一行启动、在线回放站、Claude Code / MCP 插件
 

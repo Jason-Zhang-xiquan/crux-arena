@@ -7,4 +7,5 @@ export * from './validate.ts';
 export * from './engine.ts';
 export * from './battlelog.ts';
 export * from './scripted.ts';
+export * from './demo-brains.ts';
 export { demoConfig, demoScript } from './fixtures/microservices.ts';

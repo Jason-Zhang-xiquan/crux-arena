@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:">
+<title>Crux Arena</title>
+<script src="fonts.js"></script>
+<link href="ui.css" rel="stylesheet">
+<link href="arena.css" rel="stylesheet">
+</head>
+<body>
+  <div id="stage">
+    <div id="hud" class="hit">
+      <span id="round" class="px">READY</span>
+      <span class="mana"><i id="manaFill"></i></span>
+      <span id="tok">0 tok</span>
+      <span id="reads" hidden></span>
+      <span class="demo">DEMO</span>
+      <button class="btn" id="speed" title="倍速">1X</button>
+      <button class="btn" id="toggleLog" title="战报">LOG</button>
+      <button class="btn" id="close" title="关闭（Esc）">×</button>
+    </div>
+    <div id="question"></div>
+    <div id="cards"></div>
+    <div id="consensus"></div>
+    <div id="banner"></div>
+    <div id="log" class="hit">
+      <div class="lhd"><b class="px">BATTLE LOG</b><span class="hint">点 ←#编号 追溯</span></div>
+      <div id="lines"></div>
+      <div id="edges"><b class="px">WHO CONVINCED WHO</b><div id="edgeList"><span class="hint">认输必须写明被哪一步说服</span></div></div>
+    </div>
+    <div id="result" class="hit" hidden></div>
+    <div id="full" class="hit" hidden><div class="fhd"><b class="px">battle-log.md</b><button class="btn" id="copyLog">COPY</button><button class="btn" id="closeFull">CLOSE</button></div><pre id="fullText"></pre></div>
+  </div>
+<script src="../../../sprites/mascots.js"></script>
+<script src="arena.js"></script>
+</body>
+</html>

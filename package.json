@@ -12,7 +12,9 @@
     "test": "node --test \"packages/*/test/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json",
     "demo": "node packages/cli/src/main.ts demo",
-    "crux": "node packages/cli/src/main.ts"
+    "crux": "node packages/cli/src/main.ts",
+    "desktop": "electron packages/desktop",
+    "desktop:selftest": "electron packages/desktop --selftest"
   },
   "devDependencies": {
     "@types/node": "25.9.9",

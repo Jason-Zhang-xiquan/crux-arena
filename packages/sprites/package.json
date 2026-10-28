@@ -1,0 +1,7 @@
+{
+  "name": "@crux/sprites",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Crux Arena 吉祥物像素精灵（浏览器全局脚本）",
+  "files": ["mascots.js"]
+}

@@ -5,11 +5,14 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { ScriptedBrains, createRecorder, demoConfig, demoScript, parseEventLines, renderBattleLog, runMatch } from '@crux/engine';
 import { WorkspaceError, openWorkspace } from '@crux/workspace';
+import { runLocalMatch } from './match.ts';
 
 const HELP = `crux · AI 竞技场命令行（Phase 0）
 
 用法：
-  crux demo [--out matches] [--quiet]        用脚本化大脑跑一场演示比赛，写出 events.jsonl 和 battle-log.md
+  crux fight "问题" [--team claude,codex,gemini,deepseek] [--mode ffa|team] [--dir 文件夹] [--out matches]
+                                             开打（目前用演示大脑），写出 events.jsonl 和 battle-log.md
+  crux demo [--out matches] [--quiet]        跑固定剧本的演示赛（和网页原型同一场）
   crux log <events.jsonl>                    从事件文件重新生成 battle-log.md 并打印
   crux ws <文件夹> map                        打印仓库地图
   crux ws <文件夹> ls [路径] [--depth N]       列目录
@@ -30,11 +33,26 @@ async function main(argv: string[]) {
       to: { type: 'string' },
       regex: { type: 'boolean', default: false },
       path: { type: 'string' },
+      team: { type: 'string', default: 'claude,codex,gemini,deepseek' },
+      mode: { type: 'string', default: 'ffa' },
+      dir: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
   const [cmd, ...rest] = positionals;
   if (!cmd || values.help) { console.log(HELP); return; }
+
+  if (cmd === 'fight') {
+    const question = rest.join(' ').trim();
+    if (!question) throw new Error('用法：crux fight "问题" [--team …] [--mode ffa|team] [--dir 文件夹]');
+    if (values.mode !== 'ffa' && values.mode !== 'team') throw new Error('--mode 只能是 ffa 或 team');
+    const team = values.team.split(',').map(x => x.trim()).filter(Boolean);
+    if (team.length < 2 || team.length > 6) throw new Error('--team 需要 2–6 名选手');
+    const r = await runLocalMatch({ question, team, mode: values.mode, dir: values.dir, outDir: values.out });
+    if (!values.quiet) console.log(r.battleLog);
+    console.log(`已写出 ${r.eventsFile} 和 ${r.logFile}（${r.events.length} 个事件，演示大脑）`);
+    return;
+  }
 
   if (cmd === 'demo') {
     const dir = path.join(values.out, demoConfig.matchId ?? 'demo');

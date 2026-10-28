@@ -1,0 +1,14 @@
+/* 桌面版共用样式：像素字体、配色、按钮 */
+:root{
+  --ink:#f4ecff; --dim:#9a8cc2; --line:#3b2f63; --panel:#16112a;
+  --gold:#f5c542; --red:#ff4d6d; --blue:#4cc9f0; --green:#7ae582; --violet:#b8a6ff;
+  --px:'Press Start 2P', monospace;
+  --zh:'Fusion Pixel 12px Proportional Simplified Chinese', 'Microsoft YaHei UI', sans-serif;
+}
+*{box-sizing:border-box}
+body{color:var(--ink);font-family:var(--zh);font-size:12px}
+canvas{image-rendering:pixelated;display:block}
+.btn{font-family:var(--px);font-size:8px;color:var(--ink);background:#2c2252;border:2px solid #000;box-shadow:0 0 0 2px #4a3b80;padding:6px 8px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#3d2f70}
+.btn:active{transform:translateY(1px)}
+.hint{color:var(--dim)}

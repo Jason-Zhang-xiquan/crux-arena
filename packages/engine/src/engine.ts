@@ -22,6 +22,8 @@ export interface MatchConfig {
   maxRounds?: number;
   workspace?: { root: string };
   price?: (tokens: number) => number;
+  /** match_started 之后、盲答之前调用：文件夹模式在这里做侦察（仓库地图等），审计会进入事件流 */
+  onStart?: () => Promise<void>;
 }
 
 export type Sink = (e: MatchEvent) => void | Promise<void>;
@@ -67,6 +69,8 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
     type: 'match_started', matchId: cfg.matchId ?? randomUUID().slice(0, 8), question: cfg.question, mode, fighters,
     judge: cfg.judge, chair: cfg.chair, budget, maxRounds, ...(cfg.workspace ? { workspace: cfg.workspace } : {}),
   });
+
+  await cfg.onStart?.();
 
   // ROUND 0：盲答。并行调用，互相看不到。
   emit({ type: 'round_started', round: 0 });

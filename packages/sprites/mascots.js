@@ -1,3 +1,4 @@
+// @crux/sprites：13 个 AI 吉祥物的像素精灵（浏览器全局脚本，网页原型和桌面版共用）
 const OUT = '#140d1f';
 /* 吉祥物：每个 AI 一个原创像素形象（非官方同人），24×20，全部朝右画，右侧选手镜像 */
 const MW = 24, MH = 20;
@@ -193,21 +194,21 @@ Object.assign(MASCOTS, {
     mouth(g, pose, 8, 14, e);
   },
 });
-// 全部角色（选人界面、竞技场共用）
+// 全部角色（网页原型、桌面版共用）。id 与引擎里的选手编号一致，kind 是精灵画法
 const ROSTER = [
-  {kind:'crab',  name:'CLAUDE',   zh:'小螃蟹',     maker:'Anthropic',        color:'#f0896a', region:'intl', idea:'橙色方块身体、竖条眼、一对大钳子；待机钳子开合，攻击时夹紧。'},
-  {kind:'bot',   name:'CODEX',    zh:'终端机器人', maker:'OpenAI',           color:'#3ddc84', region:'intl', idea:'CRT 显示器脑袋，屏幕上的 >_ 就是脸；攻击变 >>!，受击变 x x。'},
-  {kind:'star',  name:'GEMINI',   zh:'双子星',     maker:'Google',           color:'#a78bfa', region:'intl', idea:'蓝紫粉渐变四角星，旁边绕着一颗小星星；攻击时四个尖角发光。'},
-  {kind:'grok',  name:'GROK',     zh:'黑洞小怪',   maker:'xAI',              color:'#e8e8e8', region:'intl', idea:'黑洞身体 + 旋转的吸积盘，挂着一脸坏笑；攻击时眼睛变红。'},
-  {kind:'muse',  name:'MUSE',     zh:'眼镜精灵',   maker:'Meta',             color:'#4d94ff', region:'intl', idea:'无限符号 ∞ 变成一副眼镜（致敬 Meta 眼镜），头顶一颗 spark 闪烁。'},
-  {kind:'cat',   name:'MISTRAL',  zh:'橘猫',       maker:'Mistral AI',       color:'#ff8a1f', region:'intl', idea:'Le Chat 就是"猫"：黄到红的渐变条纹橘猫，尾巴会摇。'},
-  {kind:'whale', name:'DEEPSEEK', zh:'小鲸鱼',     maker:'深度求索',         color:'#7d95ff', region:'cn',   idea:'蓝色小鲸鱼，头顶喷水；攻击时水花炸开。'},
-  {kind:'bun',   name:'DOUBAO',   zh:'豆沙包',     maker:'字节跳动 · 豆包',  color:'#ffb3c1', region:'cn',   idea:'白白胖胖的豆沙包，顶上一点红豆沙，会一鼓一鼓地呼吸；生气时冒热气。'},
-  {kind:'qwen',  name:'QWEN',     zh:'问号精灵',   maker:'阿里 · 千问',      color:'#8f8bf7', region:'cn',   idea:'"千问"：紫色六边形宝石，头顶一根问号天线。'},
-  {kind:'moon',  name:'KIMI',     zh:'登月小月亮', maker:'月之暗面',         color:'#e9e4cc', region:'cn',   idea:'"Moonshot"：一颗小月亮，一枚小火箭绕着它飞，攻击时火焰变长。'},
-  {kind:'ingot', name:'YUANBAO',  zh:'金元宝',     maker:'腾讯 · 元宝',      color:'#f5c542', region:'cn',   idea:'金灿灿的元宝，两头翘起，旁边一闪一闪。'},
-  {kind:'prism', name:'GLM',      zh:'光谱棱镜',   maker:'智谱',             color:'#8fb4ff', region:'cn',   idea:'"智谱 ≈ 光谱"：白光射进棱镜，分成彩虹射向对手。'},
-  {kind:'conch', name:'MINIMAX',  zh:'小海螺',     maker:'MiniMax · 海螺',   color:'#ff7a93', region:'cn',   idea:'致敬"海螺 AI"：粉色螺旋小海螺，花纹会转。'},
+  {id:'claude', kind:'crab',  name:'CLAUDE',   zh:'小螃蟹',     maker:'Anthropic',        color:'#f0896a', region:'intl', idea:'橙色方块身体、竖条眼、一对大钳子；待机钳子开合，攻击时夹紧。'},
+  {id:'codex', kind:'bot',   name:'CODEX',    zh:'终端机器人', maker:'OpenAI',           color:'#3ddc84', region:'intl', idea:'CRT 显示器脑袋，屏幕上的 >_ 就是脸；攻击变 >>!，受击变 x x。'},
+  {id:'gemini', kind:'star',  name:'GEMINI',   zh:'双子星',     maker:'Google',           color:'#a78bfa', region:'intl', idea:'蓝紫粉渐变四角星，旁边绕着一颗小星星；攻击时四个尖角发光。'},
+  {id:'grok', kind:'grok',  name:'GROK',     zh:'黑洞小怪',   maker:'xAI',              color:'#e8e8e8', region:'intl', idea:'黑洞身体 + 旋转的吸积盘，挂着一脸坏笑；攻击时眼睛变红。'},
+  {id:'muse', kind:'muse',  name:'MUSE',     zh:'眼镜精灵',   maker:'Meta',             color:'#4d94ff', region:'intl', idea:'无限符号 ∞ 变成一副眼镜（致敬 Meta 眼镜），头顶一颗 spark 闪烁。'},
+  {id:'mistral', kind:'cat',   name:'MISTRAL',  zh:'橘猫',       maker:'Mistral AI',       color:'#ff8a1f', region:'intl', idea:'Le Chat 就是"猫"：黄到红的渐变条纹橘猫，尾巴会摇。'},
+  {id:'deepseek', kind:'whale', name:'DEEPSEEK', zh:'小鲸鱼',     maker:'深度求索',         color:'#7d95ff', region:'cn',   idea:'蓝色小鲸鱼，头顶喷水；攻击时水花炸开。'},
+  {id:'doubao', kind:'bun',   name:'DOUBAO',   zh:'豆沙包',     maker:'字节跳动 · 豆包',  color:'#ffb3c1', region:'cn',   idea:'白白胖胖的豆沙包，顶上一点红豆沙，会一鼓一鼓地呼吸；生气时冒热气。'},
+  {id:'qwen', kind:'qwen',  name:'QWEN',     zh:'问号精灵',   maker:'阿里 · 千问',      color:'#8f8bf7', region:'cn',   idea:'"千问"：紫色六边形宝石，头顶一根问号天线。'},
+  {id:'kimi', kind:'moon',  name:'KIMI',     zh:'登月小月亮', maker:'月之暗面',         color:'#e9e4cc', region:'cn',   idea:'"Moonshot"：一颗小月亮，一枚小火箭绕着它飞，攻击时火焰变长。'},
+  {id:'yuanbao', kind:'ingot', name:'YUANBAO',  zh:'金元宝',     maker:'腾讯 · 元宝',      color:'#f5c542', region:'cn',   idea:'金灿灿的元宝，两头翘起，旁边一闪一闪。'},
+  {id:'glm', kind:'prism', name:'GLM',      zh:'光谱棱镜',   maker:'智谱',             color:'#8fb4ff', region:'cn',   idea:'"智谱 ≈ 光谱"：白光射进棱镜，分成彩虹射向对手。'},
+  {id:'minimax', kind:'conch', name:'MINIMAX',  zh:'小海螺',     maker:'MiniMax · 海螺',   color:'#ff7a93', region:'cn',   idea:'致敬"海螺 AI"：粉色螺旋小海螺，花纹会转。'},
 ];
 function drawPose(c, kind, pose){ const g = c.getContext('2d'); g.clearRect(0, 0, MW, MH); MASCOTS[kind](g, pose || 'idle'); }
 function mascot(kind, pose, scale){

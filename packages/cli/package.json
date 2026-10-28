@@ -9,5 +9,8 @@
   "dependencies": {
     "@crux/engine": "0.0.0",
     "@crux/workspace": "0.0.0"
+  },
+  "exports": {
+    "./match": "./src/match.ts"
   }
 }

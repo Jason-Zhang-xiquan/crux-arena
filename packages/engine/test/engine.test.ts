@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  ScriptedBrains, checkAction, clampText, createRecorder, demoConfig, demoScript, measure, parseEventLines,
+  DemoBrains, fighterSpecs, ScriptedBrains, checkAction, clampText, createRecorder, demoConfig, demoScript, measure, parseEventLines,
   reduce, renderBattleLog, renderBoard, boardView, runMatch, sumTokens, WHY_LIMIT,
 } from '../src/index.ts';
 import type { MatchConfig, MatchEvent, Script } from '../src/index.ts';
@@ -140,4 +140,31 @@ test('measure / clampText：20 个汉字或 12 个英文词', () => {
   assert.equal(clampText('短理由', WHY_LIMIT).truncated, false);
   const c = clampText('这是一个明显超过二十个汉字长度限制的理由文本用来测试截断', WHY_LIMIT);
   assert.ok(c.truncated && c.text.endsWith('…') && measure(c.text) <= WHY_LIMIT);
+});
+
+test('演示大脑：2–6 人、混战 / 组队都能打完，有人认输且没有不合规动作', async () => {
+  const ids = ['claude', 'codex', 'gemini', 'deepseek', 'doubao', 'kimi'];
+  for (const mode of ['ffa', 'team'] as const) {
+    for (let n = 2; n <= 6; n++) {
+      const fighters = fighterSpecs(ids.slice(0, n));
+      const rec = await runMatch({ question: '演示问题', mode, fighters, judge: 'demo/judge', chair: 'demo/chair' }, new DemoBrains(fighters, mode), createRecorder({ now: fixedClock() }));
+      const s = rec.state;
+      const tag = `${mode} ${n} 人`;
+      assert.deepEqual(s.flags, [], `${tag} 不应有标记`);
+      assert.equal(s.converged?.reason, 'settled', `${tag} 应该收敛`);
+      assert.ok(s.final, `${tag} 应该有冠军答案`);
+      assert.ok(s.edges.length >= 1, `${tag} 至少有一条说服链`);
+      assert.equal(s.claims.C1.status, 'alive', `${tag} 单体论点应该存活`);
+      if (n >= 4 && mode === 'ffa') assert.ok(s.skips.length >= 1, `${tag} 应有选手轮空`);
+    }
+  }
+});
+
+test('onStart 钩子在盲答前运行，工具审计进入事件流', async () => {
+  const fighters = fighterSpecs(['claude', 'codex']);
+  const rec = createRecorder({ now: fixedClock() });
+  await runMatch({ question: 'q', fighters, judge: 'j', chair: 'c', workspace: { root: '/tmp/x' }, onStart: async () => { rec.tool({ actor: 'scout', tool: 'repo_map', input: {}, ok: true, bytes: 10 }); } }, new DemoBrains(fighters), rec);
+  const types = rec.events.map(e => e.type);
+  assert.equal(types.indexOf('tool_call'), 1);
+  assert.match(renderBattleLog(rec.events), /只读，读取 1 次，写入 0 次/);
 });

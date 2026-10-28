@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:">
+<title>Crux Arena</title>
+<script src="fonts.js"></script>
+<link href="ui.css" rel="stylesheet">
+<style>
+  html,body{background:transparent;height:100%}
+  body{margin:0;padding:14px;overflow:hidden}
+  .panel{height:100%;display:flex;flex-direction:column;gap:12px;padding:16px 18px;background:#110c22;border:3px solid #000;box-shadow:0 0 0 3px var(--gold),8px 8px 0 rgba(0,0,0,.45)}
+  .top{display:flex;align-items:center;gap:10px;-webkit-app-region:drag;user-select:none}
+  .top h1{margin:0;font-family:var(--px);font-size:16px;color:var(--gold);text-shadow:2px 2px 0 #7a3b00}
+  .top .key{margin-left:auto;color:var(--dim)}
+  .top .key b{font-family:var(--px);font-size:8px;color:var(--ink);background:#2c2252;border:2px solid #000;padding:3px 5px;font-weight:normal}
+  .top button{-webkit-app-region:no-drag}
+  textarea{width:100%;height:84px;resize:none;background:#0b0816;color:var(--ink);border:3px solid #000;box-shadow:0 0 0 2px var(--line);padding:10px 12px;font-family:var(--zh);font-size:18px;line-height:24px}
+  textarea:focus,input:focus{outline:none;box-shadow:0 0 0 2px var(--gold)}
+  .row{display:flex;align-items:center;gap:8px}
+  .lbl{font-family:var(--px);font-size:8px;color:var(--dim);width:58px;flex:none}
+  .path{flex:1;min-width:0;padding:7px 10px;background:#0b0816;border:3px solid #000;box-shadow:0 0 0 2px var(--line);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .path.empty{color:var(--dim)}
+  .lock{font-family:var(--px);font-size:7px;color:#000;background:var(--green);border:2px solid #000;padding:4px 6px;white-space:nowrap}
+  .seg{display:flex;gap:6px}
+  .seg button.on{background:var(--gold);color:#000}
+  .tiles{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px 4px;background:#16112a;border:2px solid #000;box-shadow:0 0 0 2px var(--line);cursor:pointer}
+  .tile:hover{box-shadow:0 0 0 2px var(--c)}
+  .tile.sel{background:#22183f;box-shadow:0 0 0 3px var(--c)}
+  .tile .nm{font-family:var(--px);font-size:6px;color:var(--c)}
+  .tile .badge{position:absolute;top:-8px;right:-6px;display:none;font-family:var(--px);font-size:7px;color:#000;background:var(--b,var(--c));border:2px solid #000;padding:2px 3px}
+  .tile.sel .badge{display:block}
+  .foot{margin-top:auto;display:flex;align-items:center;gap:10px}
+  .demo{color:var(--dim);line-height:16px;flex:1}
+  .demo b{color:var(--gold);font-weight:normal}
+  .go{font-family:var(--px);font-size:12px;color:#000;background:var(--gold);border:3px solid #000;box-shadow:0 0 0 2px #7a3b00;padding:12px 16px;cursor:pointer}
+  .go:disabled{opacity:.45;cursor:not-allowed}
+  .err{color:var(--red);min-height:14px}
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="top">
+    <h1>CRUX ARENA</h1>
+    <span class="key">唤出 <b id="hotkey">—</b></span>
+    <button class="btn" id="close" title="收起（Esc）">ESC</button>
+  </div>
+  <textarea id="q" placeholder="写下你的难题，例如：这个仓库的后端该继续单体，还是拆成微服务？" spellcheck="false"></textarea>
+  <div class="row">
+    <span class="lbl">FOLDER</span>
+    <span class="path empty" id="dir">不读文件，只讨论问题</span>
+    <button class="btn" id="pick">选择</button>
+    <button class="btn" id="clear">清除</button>
+    <span class="lock">READ-ONLY</span>
+  </div>
+  <div class="row">
+    <span class="lbl">MODE</span>
+    <div class="seg" id="mode">
+      <button class="btn" data-k="ffa">FFA 混战</button>
+      <button class="btn" data-k="team">TEAM 红 vs 蓝</button>
+    </div>
+    <span class="hint" id="modeHint"></span>
+  </div>
+  <div>
+    <div class="row" style="margin-bottom:8px"><span class="lbl">FIGHTERS</span><span class="hint" id="count"></span></div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="foot">
+    <div class="demo"><b>演示大脑</b>：还没接入真实模型，对战内容是规则驱动的演示剧本；文件夹会被真实地只读侦察。</div>
+    <button class="go" id="go">FIGHT!</button>
+  </div>
+</div>
+<script src="../../../sprites/mascots.js"></script>
+<script src="launcher.js"></script>
+</body>
+</html>
