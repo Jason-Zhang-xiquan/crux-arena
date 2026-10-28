@@ -345,7 +345,7 @@ C3 ✗ ⇐ #A7 GEMINI 认输 ⇐ #A3 #A6
 
 | 可调项 | 说明 |
 |---|---|
-| 通道 | 各家官方 API 直连、OpenRouter（一个 key 接多家）、本地 Ollama、本地订阅 CLI（Claude Code、Codex CLI 等，按只读方式启动） |
+| 通道 | 任何接入方式（见 §6.7）：会员命令行（Claude Code、Cursor Agent、Codex CLI…）、兼容 API（OpenRouter、各家平台、Ollama…），或用户自己写的脚本 |
 | 模型 | 同一个选手可选同家不同档位，例如 CLAUDE 选 `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5` |
 | 推理强度 | 统一五档：`off` / `low` / `medium` / `high` / `max`（见 §6.3） |
 | 单次输出上限 | 每次调用的最大输出 token，防止某个选手写长篇碾压别人 |
@@ -444,6 +444,103 @@ C3 ✗ ⇐ #A7 GEMINI 认输 ⇐ #A3 #A6
 
 **界面**：输入框里每张选手卡可以右键选模型和推理档位，顶部显示开赛预估（如"≈ 38k tok · $0.15"）；竞技场里额度告急的选手显示"LOW BATTERY"，退场时变灰。
 
+### 6.7 通道：任何接入方式都能插上（可扩展）
+
+模型和接入方式变得太快，我们不追着适配每一家。引擎只认一个统一的**通道**接口；通道背后是会员命令行、API 还是本地模型，引擎不关心。开源后，每个人接自己手上有的东西，**也可以让自己的 AI 助手替自己写接入**。
+
+**统一接口**（一次调用 = 一个请求 JSON → 一个结果 JSON）：
+
+```json
+// 请求
+{ "v": 1, "task": "draft | act | crux | rule | final",
+  "model": "grok-4.7", "effort": "medium",
+  "system": "……", "messages": [{ "role": "user", "content": "……" }],
+  "schema": { "…": "要求输出的 JSON Schema" }, "maxOutputTokens": 600, "timeoutMs": 120000 }
+
+// 成功
+{ "ok": true, "json": { "…": "按 schema 的结构化结果" }, "text": "原始文本（可选）",
+  "usage": { "in": 1820, "out": 142, "reasoning": 300, "cached": 1200, "estimated": false },
+  "model": "实际使用的模型", "effortApplied": "实际映射，如 grok-4.7-medium" }
+
+// 失败：只有这几种类型，正好对应 §6.5 的处理规则
+{ "ok": false, "error": { "kind": "rate_limit | quota | unavailable | context_length | refusal | auth | bad_output",
+  "message": "……", "retryAfterMs": 30000, "resetAt": "额度恢复时间（知道的话）" } }
+```
+
+**三种接入方式**，从不写代码到写代码：
+
+| 方式 | 适合 | 用户要做什么 |
+|---|---|---|
+| **命令行模板**（零代码） | Claude Code、Cursor Agent、Codex CLI、Ollama，以及任何命令行工具 | 一段配置：怎么调用、提示词从哪进、结果和用量从输出哪里取、出现哪些字样算"额度用尽 / 限流 / 未登录" |
+| **兼容 API**（零代码） | OpenRouter，以及提供 OpenAI / Anthropic 兼容接口的平台（多数国内平台都有），本地 Ollama、LM Studio | 地址、模型名、key 的引用（key 本身在系统钥匙串里） |
+| **脚本协议**（任何语言） | 前两种覆盖不了的情况 | 一个小程序：从标准输入读请求 JSON，往标准输出写结果 JSON。Python、Node、Go 都行 |
+
+配置示例（命令行模板；参数以各工具当前版本的 `--help` 为准）：
+
+```json
+{
+  "channels": {
+    "cursor": {
+      "type": "command",
+      "cmd": ["cursor-agent", "-p", "--output-format", "json", "--model", "{model}"],
+      "prompt": "stdin",
+      "result": "json:result", "usage": "json:usage",
+      "errors": { "quota": ["usage limit", "upgrade your plan"], "auth": ["not logged in"], "rate_limit": ["rate limit", "429"] },
+      "effort": { "mode": "model-suffix", "map": { "low": "-low", "medium": "-medium", "high": "-high", "max": "-xhigh" } }
+    }
+  },
+  "fighters": {
+    "grok": { "channel": "cursor", "model": "grok-4.7", "effort": "medium" },
+    "kimi": { "channel": "cursor", "model": "kimi-k3", "effort": "high" }
+  }
+}
+```
+
+**推理档位映射**：每个通道声明自己怎么表达档位：参数（如 `--effort high`）、模型名后缀（如 `grok-4.7-high`）、思考 token 预算，或不支持。引擎把统一的五档交给通道翻译，实际映射写进 `model_call` 事件。
+
+**内置预设 + 自动探测**：
+
+- 预设：Claude Code、Cursor Agent、Codex CLI、OpenRouter、Ollama。
+- `crux channel probe`：扫描本机装了哪些命令行工具、是否已登录、能用哪些模型（只读模型列表，不发起对话、不耗额度），自动生成通道配置，并把能上场的选手标出来。
+
+**让用户的 AI 助手写接入**：
+
+1. 仓库里放一份**写给 AI 看的接入说明**（`docs/channels.md`）：协议、错误类型、档位映射规则，加上三种方式各一个可运行的模板。
+2. 用户对自己的 Claude Code / Cursor / Codex 说"帮我给 Crux Arena 接入 XXX，按 docs/channels.md 来"，它生成配置或脚本。
+3. **验收测试 `crux channel test <通道>`**，通过了才能上场：
+   - 结构化输出：按给定 schema 回答，格式不对能被识别为 `bad_output`；
+   - 推理档位：五档都能映射，或明确声明不支持；
+   - 用量：会上报 token，或标明是估算；
+   - 错误分类：用模拟场景检查限流、额度用尽、超时、未登录能否被正确归类；
+   - 超时与输出大小上限生效。
+   `--mock` 先只验证格式和流程，不耗额度；最后再做一次真实调用验收。
+4. 桌面版设置页加"添加通道"：给出一段可以直接复制给自己 agent 的话；接好后点"验收"，结果显示在通道列表里。
+
+**会员通道的特点**（Claude 会员、ChatGPT 会员、Cursor 会员等）：
+
+- 不按 token 扣钱，而是有使用窗口或月度用量。引擎照样记 token（命令行不报就按字数估算，标为估算），用于公平和预算。
+- 命令行一旦提示用量到上限，就按 `quota` 处理：降级、退场、暂停、断点续打全部照 §6.5 走。
+- 每次调用要启动一次命令行，比 API 慢。用盲答并行、保持会话、按通道限制并发来缓解。
+- 用官方命令行、在自己电脑上、给自己用，是这些工具的正常用法；不要把自己的会员当后端给别人用。具体以各家条款为准。
+
+**作者当前环境（2026-10-28 实测）**：
+
+| 通道 | 状态 | 能上场的选手 |
+|---|---|---|
+| Claude Code（Claude 会员） | 已安装、可用；支持 `--model`、`--effort`、JSON 输出、限制工具 | CLAUDE |
+| Cursor Agent（Cursor 会员） | 已安装、已登录；账号下 270 个模型，档位写在模型名后缀里 | CODEX（GPT）、GROK、GEMINI（Gemini 4 Argon 等）、KIMI（K3）、GLM（5.2）、DEEPSEEK（V4.1）；CLAUDE 的备用 |
+| Codex CLI（ChatGPT 会员） | 未安装 | 装好后接 CODEX |
+| 无通道 | 需要 API / OpenRouter / Ollama | MUSE、MISTRAL、DOUBAO、QWEN、YUANBAO、MINIMAX |
+
+没有通道的选手在输入框里显示为灰色"无通道"，**不会偷偷换成别的模型冒充**。
+
+**安全边界**：
+
+- 命令行和脚本通道会在本机执行命令，只能由用户自己在配置里定义；比赛内容（问题、模型输出）不会改变要执行的命令，提示词只走标准输入或临时文件，不拼进命令行参数。
+- 每次调用都有超时和输出大小上限；通道进程不需要、也拿不到文件夹访问权：文件由我们的只读工具读取，再把片段放进提示词，审计和敏感文件屏蔽仍在引擎手里。
+- 会员命令行一律以只读 / 问答模式启动，并关闭它自带的写文件、执行命令能力。
+- API key 只以引用的形式出现在配置里，绝不写进事件、战报和日志。
+
 ---
 
 ## 7. 技术架构
@@ -517,7 +614,11 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 - [ ] GitHub、Show HN、r/LocalLLaMA、X、B站 / YouTube
 
 ### Phase 4 — 接入真实模型（最后做，见 §6）
-- [ ] Provider 接口：各家直连、OpenRouter、Ollama、订阅 CLI；统一返回 usage（输入 / 输出 / 思考 / 缓存）
+- [ ] **外壳先行（不发真实请求）**：通道接口 + 模拟通道（可模拟限流、额度用尽、超时、拒答、格式错误），把下面的预算、降级、退场、暂停、续打全部用它测通
+- [ ] 通道三种方式：命令行模板、兼容 API、脚本协议（§6.7）；统一返回 usage（输入 / 输出 / 思考 / 缓存，或标为估算）
+- [ ] 内置预设（Claude Code、Cursor Agent、Codex CLI、OpenRouter、Ollama）+ `crux channel probe` 自动探测
+- [ ] 写给 AI 的接入说明 `docs/channels.md` + 三种模板 + `crux channel test` 验收（含 `--mock`）；设置页"添加通道"
+- [ ] 第一批真实通道：Claude Code（CLAUDE）、Cursor Agent（CODEX / GROK / GEMINI / KIMI / GLM / DEEPSEEK）
 - [ ] 基于提示词的 LLM 大脑：盲答、分歧提取、动作（结构化输出 + 校验重试）、裁判、主席
 - [ ] 推理强度五档与各家参数映射；按角色、按阶段的默认值
 - [ ] 四层预算：单次、单选手、单场、每日 / 每月；冠军答案预留 15%；开赛前估价与降级建议
@@ -554,5 +655,7 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 | 额度中途用尽 | 错误分类 + 降级链 + 选手退场；冠军答案预留预算；暂停与断点续打 |
 | 模型之间不公平 | 默认每人等额 token 上限；输出上限；评测时推理档位对齐 |
 | API key 泄露 | 存系统钥匙串，只在主进程使用，绝不写进事件和日志 |
+| AI 写的通道不可靠 / 不安全 | `crux channel test` 验收通过才能上场；超时与输出上限；命令只能由用户在配置里定义，比赛内容不进命令行参数 |
+| 用会员冒充其他模型 | 没有通道的选手显示"无通道"，不自动替换；每次调用的实际模型写进事件 |
 | 美术工作量 | 先用原型里的程序化精灵，Phase 2 再精修 |
 | 名称与商标 | 发布前检查 GitHub / npm / 商标冲突 |
