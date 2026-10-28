@@ -46,6 +46,7 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
 @keyframes bob{50%{transform:translateY(-3px)}}
 .fighter.flip .spr{transform:scaleX(-1)}
 .fighter .shadow{position:absolute;left:14px;bottom:2px;width:68px;height:7px;background:var(--team,rgba(0,0,0,.45))}
+.fighter .mtag{position:absolute;left:50%;bottom:-27px;transform:translateX(-50%);font-size:9px;white-space:nowrap;max-width:84px;overflow:hidden;text-overflow:ellipsis;padding:0 4px;background:rgba(0,0,0,.6);color:#d8d0f0}
 .fighter .ntag{position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);font-family:var(--px);font-size:7px;white-space:nowrap;padding:2px 4px;background:rgba(0,0,0,.7);color:var(--fc)}
 .fighter.dim{filter:grayscale(.85) brightness(.55)}
 .fighter.hurt .spr{animation:hurt .3s steps(2) 2}
@@ -100,7 +101,11 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
   padding:14px 16px;background:#0e0920;border:3px solid #000;box-shadow:0 0 0 3px var(--gold),8px 8px 0 rgba(0,0,0,.5);z-index:40}
 #result h2{margin:0;font-family:var(--px);font-size:15px;color:var(--gold);text-shadow:2px 2px 0 #7a3b00}
 #result .sub{margin-top:6px;color:var(--dim)}
-#result .champ{margin-top:10px;padding:10px 12px;background:#f4ecff;color:#1a1233;border:3px solid #000;font-size:16px;line-height:22px}
+#result .champ{margin-top:10px;padding:10px 12px;background:#f4ecff;color:#1a1233;border:3px solid #000;font-size:15px;line-height:22px}
+#result .champ h4{margin:8px 0 4px;font-size:15px}
+#result .champ p{margin:0 0 6px}
+#result .champ ul,#result .champ ol{margin:0 0 6px;padding-left:22px}
+#result .champ code{font-size:13px;background:#e2d6ff;padding:0 3px}
 #result .notes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 #result .note{padding:6px 8px;border:2px dashed var(--line);line-height:16px}
 #result .note b{display:block;font-family:var(--px);font-size:7px;font-weight:normal;color:var(--gold);margin-bottom:4px}
@@ -111,3 +116,8 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
 #full .fhd b{margin-right:auto;font-size:9px;color:var(--gold);font-weight:normal}
 #full pre{flex:1;margin:0;padding:10px 12px;overflow:auto;font-family:var(--zh);font-size:12px;line-height:17px;color:#e2d8ff}
 [hidden]{display:none!important}
+
+/* 录视频用的背景（--backdrop）：夜空渐变 + 像素地面 */
+body.backdrop{background:linear-gradient(#0d0a1f 0%,#1f1640 55%,#3a2766 100%)}
+body.backdrop::after{content:'';position:fixed;left:0;right:0;bottom:0;height:18px;z-index:-1;
+  background:repeating-linear-gradient(90deg,#2a1d4f 0 16px,#33245e 16px 32px);border-top:3px solid #000}

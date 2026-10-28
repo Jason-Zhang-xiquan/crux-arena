@@ -13,8 +13,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const page = (f: string) => path.join(here, 'renderer', f);
 const preload = path.join(here, 'preload.cjs');
 const SELFTEST = process.argv.includes('--selftest');
+// 录屏用：electron packages/desktop --replay <存档文件夹> [--speed 2] [--exit-after-replay] [--backdrop]
+const argValue = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
+const REPLAY_DIR = argValue('--replay');
+const SPEED = Number(argValue('--speed')) || undefined;
+const EXIT_AFTER_REPLAY = process.argv.includes('--exit-after-replay');
+const BACKDROP = process.argv.includes('--backdrop');   // 录视频时铺深色背景，不录到桌面上的其他窗口
 const FALLBACK_HOTKEYS = ['CommandOrControl+Alt+Space', 'CommandOrControl+Shift+Space', 'Alt+Shift+A'];
-const BAND_HEIGHT = 440;
+const BAND_HEIGHT = 500;
 const REPO_URL = 'https://github.com/Jason-Zhang-xiquan/crux-arena';
 
 interface Settings {
@@ -124,7 +130,7 @@ function createArena(opts: { replay?: boolean } = {}): BrowserWindow {
   w.setAlwaysOnTop(true, 'floating');
   w.setIgnoreMouseEvents(true, { forward: true });   // 空白处鼠标穿透，不挡你干活
   secure(w);
-  w.loadFile(page('arena.html'), { query: { speed: String(SELFTEST ? 3 : settings.speed), log: settings.logPanel, ...(opts.replay ? { replay: '1' } : {}) } });
+  w.loadFile(page('arena.html'), { query: { speed: String(SPEED ?? (SELFTEST ? 3 : settings.speed)), log: settings.logPanel, ...(opts.replay ? { replay: '1' } : {}), ...(BACKDROP ? { backdrop: '1' } : {}) } });
   w.once('ready-to-show', () => w.showInactive());
   w.on('closed', () => { if (arena === w) arena = undefined; });
   arena = w;
@@ -158,7 +164,7 @@ async function startFight(p: FightPayload): Promise<{ ok: true } | { ok: false; 
   const mode = p.mode === 'team' ? 'team' : 'ffa';
   const dir = typeof p.dir === 'string' ? p.dir.trim() : '';
   if (!question) return { ok: false, error: '先写一个问题' };
-  if (team.length < 2 || team.length > 6) return { ok: false, error: '需要 2–6 名选手' };
+  if (team.length < 2 || team.length > 8) return { ok: false, error: '需要 2–8 名选手' };
   if (dir) {
     try { if (!(await stat(dir)).isDirectory()) return { ok: false, error: '文件夹路径不是文件夹' }; }
     catch { return { ok: false, error: '找不到这个文件夹' }; }
@@ -339,6 +345,20 @@ async function selftest() {
   if (!r.ok) fail(r.error);
 }
 
+/** 命令行指定回放：直接播放；带 --exit-after-replay 时，结果卡停留 12 秒后退出（方便录屏脚本收尾） */
+async function replayFromArgs(dir: string) {
+  if (BACKDROP) {
+    // 报出竞技场在屏幕上的物理像素区域，录屏脚本据此只录这一块；稍等让录屏先启动
+    const disp = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const d = disp.workArea, k = disp.scaleFactor;
+    console.log(`[record] region ${Math.round(d.x * k)} ${Math.round((d.y + d.height - BAND_HEIGHT) * k)} ${Math.round(d.width * k)} ${Math.round(BAND_HEIGHT * k)}`);
+    await new Promise(r => setTimeout(r, 2500));
+  }
+  if (EXIT_AFTER_REPLAY) ipcMain.on('arena:progress', (_e, info: { type: string }) => { if (info.type === 'match_ended') setTimeout(() => app.quit(), 12_000); });
+  const r = await replay(path.resolve(dir));
+  if (!r.ok) { console.error(r.error); app.exit(1); }
+}
+
 /* ---------- 启动 ---------- */
 app.setName('Crux Arena');
 if (SELFTEST) app.setPath('userData', path.join(app.getPath('temp'), 'crux-selftest-userdata'));
@@ -354,6 +374,7 @@ else {
     registerHotkey();
     createLauncher();
     if (SELFTEST) await selftest();
+    else if (REPLAY_DIR) await replayFromArgs(REPLAY_DIR);
     else showLauncher();
   });
 }

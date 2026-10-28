@@ -19,9 +19,10 @@ const S = { start: null, fighters: {}, claims: {}, actions: {}, edges: [], token
 /* ---------- 布局 ---------- */
 const logW = () => ($('#log').classList.contains('collapsed') ? 0 : 380);
 const cx = () => (innerWidth - logW()) / 2;
-const BASE = () => innerHeight - 22;            // 选手脚底
+const BASE = () => innerHeight - 34;            // 选手脚底（下面留出名字和模型标签）
 const LOG = QS.get('log') ?? 'auto';
 const REPLAY = QS.get('replay') === '1';
+if (QS.get('backdrop') === '1') document.body.classList.add('backdrop');
 if (LOG === 'closed' || (LOG === 'auto' && innerWidth < 1500)) $('#log').classList.add('collapsed');
 if (REPLAY) { const b = document.createElement('span'); b.className = 'demo'; b.style.background = 'var(--blue)'; b.textContent = 'REPLAY'; $('#hud .demo').after(b); }
 
@@ -40,10 +41,18 @@ function layoutFighters() {
 
 function layoutCards() {
   const vis = Object.values(S.claims).filter(c => c.status !== 'merged');
-  const total = vis.length * 184 + Math.max(0, vis.length - 1) * 16;
-  vis.forEach((c, i) => { c.x = cx() - total / 2 + i * 200; c.y = 84; c.el.style.left = `${c.x}px`; c.el.style.top = `${c.y}px`; });
+  // 一排放不下（6 张以上）就分两排，每排张数尽量平均
+  const fit = Math.max(1, Math.floor((cx() * 2 - 40 + 16) / 200));
+  const rows = Math.ceil(vis.length / fit) || 1;
+  const perRow = Math.ceil(vis.length / rows);
+  vis.forEach((c, i) => {
+    const r = Math.floor(i / perRow), k = i % perRow, n = Math.min(perRow, vis.length - r * perRow);
+    const total = n * 184 + (n - 1) * 16;
+    c.x = cx() - total / 2 + k * 200; c.y = 84 - (rows - 1) * 34 + r * 116;
+    c.el.style.left = `${c.x}px`; c.el.style.top = `${c.y}px`;
+  });
   const cs = $('#consensus');
-  cs.style.top = '204px'; cs.style.left = `${cx()}px`;
+  cs.style.top = `${204 + (rows - 1) * 82}px`; cs.style.left = `${cx()}px`;
 }
 addEventListener('resize', () => { layoutFighters(); layoutCards(); });
 
@@ -54,7 +63,7 @@ function addFighter(f, i) {
   el.className = 'fighter' + (i % 2 ? ' flip' : '');
   el.style.setProperty('--fc', r.color);
   if (f.team) el.style.setProperty('--team', TEAM_COLOR[f.team] + 'aa');
-  el.innerHTML = `<div class="shadow"></div><div class="bob" style="animation-delay:${(i * 0.17) % 0.9}s"></div><div class="ntag">${esc((f.team ? (f.team === 'red' ? '红·' : '蓝·') : '') + f.name)}</div><div class="status"></div>`;
+  el.innerHTML = `<div class="shadow"></div><div class="bob" style="animation-delay:${(i * 0.17) % 0.9}s"></div><div class="ntag">${esc((f.team ? (f.team === 'red' ? '红·' : '蓝·') : '') + f.name)}</div>${f.model.startsWith('demo/') ? '' : `<div class="mtag">${esc(f.model.split('/').pop())}</div>`}<div class="status"></div>`;
   const spr = mascot(r.kind, 'idle', 4); spr.className = 'spr';
   el.querySelector('.bob').appendChild(spr);
   stage.appendChild(el);
@@ -185,6 +194,8 @@ function addEdges(e) {
 const H = {
   async match_started(e) {
     S.start = e;
+    S.real = e.fighters.some(f => !f.model.startsWith('demo/'));
+    if (S.real) { const b = $('#hud .demo'); b.textContent = 'LIVE'; b.style.background = 'var(--red, #ff4d6d)'; b.style.color = '#fff'; }
     $('#question').textContent = `Q：${e.question}`;
     e.fighters.forEach(addFighter);
     layoutFighters(); layoutCards(); addTokens({ in: 0, out: 0 });
@@ -307,13 +318,31 @@ const H = {
 };
 
 /* ---------- 结果卡 ---------- */
+// 冠军答案是简单 Markdown：标题、加粗、列表、段落。先转义再替换，不会注入 HTML
+function md(text) {
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  const out = [];
+  let list = null, items = [];
+  const close = () => { if (list) out.push(`<${list}>${items.join('')}</${list}>`); list = null; items = []; };
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    const ul = line.match(/^[-*•]\s+(.*)/), ol = line.match(/^\d+[.、)]\s*(.*)/), h = line.match(/^#{1,6}\s+(.*)/);
+    if (ul || ol) { const kind = ul ? 'ul' : 'ol'; if (list !== kind) { close(); list = kind; } items.push(`<li>${inline((ul ?? ol)[1])}</li>`); continue; }
+    close();
+    if (!line) continue;
+    out.push(h ? `<h4>${inline(h[1])}</h4>` : `<p>${inline(line)}</p>`);
+  }
+  close();
+  return out.join('');
+}
+
 function showResult() {
   const r = $('#result'), f = S.final;
   if (!f) return;
   const ws = S.start?.workspace;
   r.innerHTML = `<h2>CHAMPION ANSWER</h2>
-    <div class="sub">${REPLAY ? '回放 · ' : ''}${S.start.mode === 'team' ? 'TEAM · 红 vs 蓝' : 'FFA · 混战'} · 演示大脑（未接真实模型，内容为演示剧本）${ws ? ` · 📁 只读：读取 ${S.reads} 次，写入 0 次` : ''}</div>
-    <div class="champ">${esc(f.answer)}</div>
+    <div class="sub">${REPLAY ? '回放 · ' : ''}${S.start.mode === 'team' ? 'TEAM · 红 vs 蓝' : 'FFA · 混战'} · ${S.real ? `真实模型 · 裁判 ${esc(S.start.judge.split('/').pop())}` : '演示大脑（未接真实模型，内容为演示剧本）'}${ws ? ` · 📁 只读：读取 ${S.reads} 次，写入 0 次` : ''}</div>
+    <div class="champ">${md(f.answer)}</div>
     <div class="notes"><div class="note"><b>MINORITY · 少数派</b>${esc(f.minority.join('；') || '无')}</div><div class="note"><b>YOUR CALL · 需要你判断</b>${esc(f.userCruxes.join('；') || '无')}</div></div>
     <div class="acts">
       <button class="btn" id="copyAns">复制答案</button>

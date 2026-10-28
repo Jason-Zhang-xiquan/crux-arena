@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createRecorder, fighterSpecs, runMatch } from '@crux/engine';
+import { LlmBrains, classify, cursorModelFor, extractJson, limit } from '../src/index.ts';
+import type { Channel, ChannelRequest, ChannelResult, Seat } from '../src/index.ts';
+
+test('档位映射：取最接近的一档，同样近时取低一档；没有档位变体就用原名', () => {
+  const models = new Set(['kimi-k3-low', 'kimi-k3-high', 'kimi-k3-max', 'glm-5.2-high', 'glm-5.2-max', 'gpt-5.5-none', 'gpt-5.5-medium', 'gpt-5.5-extra-high', 'composer-2.5', 'composer-2.5-fast']);
+  assert.equal(cursorModelFor('kimi-k3', 'low', models), 'kimi-k3-low');
+  assert.equal(cursorModelFor('kimi-k3', 'medium', models), 'kimi-k3-low');
+  assert.equal(cursorModelFor('glm-5.2', 'low', models), 'glm-5.2-high');
+  assert.equal(cursorModelFor('gpt-5.5', 'off', models), 'gpt-5.5-none');
+  assert.equal(cursorModelFor('gpt-5.5', 'max', models), 'gpt-5.5-extra-high');
+  assert.equal(cursorModelFor('composer-2.5', 'low', models), 'composer-2.5');
+  assert.equal(cursorModelFor('nope', 'low', models), undefined);
+});
+
+test('解析输出：容忍代码块和前后文字；错误按字样归类', () => {
+  assert.deepEqual(extractJson('好的：\n```json\n{"a":1,"b":{"c":[2]}}\n```\n以上'), { a: 1, b: { c: [2] } });
+  assert.throws(() => extractJson('没有 JSON'));
+  assert.equal(classify('You have reached your usage limit'), 'quota');
+  assert.equal(classify('Error 429: Too Many Requests'), 'rate_limit');
+  assert.equal(classify('Failed to authenticate: OAuth session expired'), 'auth');
+  assert.equal(classify('socket hang up'), 'unavailable');
+});
+
+test('并发闸门：同一通道同时最多 N 个调用', async () => {
+  let running = 0, peak = 0;
+  const ch = limit({
+    id: 'x', concurrency: 2,
+    async call(): Promise<ChannelResult> {
+      running++; peak = Math.max(peak, running);
+      await new Promise(r => setTimeout(r, 10));
+      running--;
+      return { ok: true, text: '{}', usage: { in: 1, out: 1, cached: 0, estimated: false }, model: 'm', effortApplied: 'm', ms: 10 };
+    },
+  });
+  await Promise.all(Array.from({ length: 7 }, () => ch.call({ task: 'draft', model: 'm', effort: 'low', system: '', prompt: '' })));
+  assert.equal(peak, 2);
+});
+
+/** 模拟通道：按任务给出合规输出；可以注入一次格式错误、一次限流、某个模型额度用尽 */
+function mockChannel(o: { badOnce?: boolean; rateLimitOnce?: boolean; quotaModel?: string } = {}): Channel & { calls: ChannelRequest[] } {
+  const calls: ChannelRequest[] = [];
+  let bad = o.badOnce, limited = o.rateLimitOnce;
+  const ok = (json: unknown): ChannelResult => ({ ok: true, text: '```json\n' + JSON.stringify(json) + '\n```', usage: { in: 100, out: 20, cached: 0, estimated: false }, model: 'mock', effortApplied: 'mock', ms: 1 });
+  return {
+    id: 'mock', concurrency: 8, calls,
+    async call(req) {
+      calls.push(req);
+      if (req.model === o.quotaModel) return { ok: false, error: { kind: 'quota', message: 'usage limit' }, model: req.model, ms: 1 };
+      if (limited && req.task === 'act') { limited = false; return { ok: false, error: { kind: 'rate_limit', message: '429', retryAfterMs: 1 }, model: req.model, ms: 1 }; }
+      if (bad && req.task === 'draft') { bad = false; return { ok: true, text: '我觉得应该……', usage: { in: 50, out: 10, cached: 0, estimated: false }, model: 'mock', effortApplied: 'mock', ms: 1 }; }
+      if (req.task === 'draft') return ok({ answer: `${req.model} 的回答`, claim: { text: `${req.model} 的主论点`, short: `${req.model} 主张`, label: '推断' } });
+      if (req.task === 'crux') return ok({ merges: [], clash: ['C1', 'C2', 'C3'], consensus: ['都同意要做'], stances: {}, why: '优先级之争' });
+      if (req.task === 'act') {
+        // 论点板里第一张不是自己的卡就打它
+        const target = req.prompt.match(/- (C\d+) \[[^\]]+\] \d+HP · [^·]+ · 支持：(?!YOU)/)?.[1] ?? 'C1';
+        return ok({ actions: [{ kind: 'attack', target, why: '代价太高', steelman: '确实有用', detail: '成本收益不划算', evidence: [{ kind: 'file', ref: 'PLAN.md:1-2', quote: '标题' }] }] });
+      }
+      if (req.task === 'rule') return ok({ verdict: 'upheld', text: '成立', evidenceRelevant: true });
+      return ok({ answer: '**先做 A**\n- 原因', minority: [], userCruxes: ['预算多少？'], confidence: 0.7 });
+    },
+  };
+}
+
+test('LLM 大脑：模拟通道打完整场；格式错误和限流会重试，额度用尽的选手观望', async () => {
+  const ch = mockChannel({ badOnce: true, rateLimitOnce: true, quotaModel: 'm-d' });
+  const fighters = fighterSpecs(['claude', 'codex', 'grok', 'kimi']);
+  const seats: Record<string, Seat> = Object.fromEntries(fighters.map((f, i) => [f.id, { channel: ch, model: `m-${'abcd'[i]}`, effort: 'low' as const }]));
+  const rec = createRecorder();
+  const calls: string[] = [];
+  const brains = new LlmBrains({
+    seats, judge: { channel: ch, model: 'judge', effort: 'low' }, chair: { channel: ch, model: 'chair', effort: 'medium' },
+    state: () => rec.state, verify: async e => ({ ok: true, note: `${e.ref}：原文核对一致` }),
+    onCall: c => calls.push(`${c.role}:${c.task}:${c.ok ? 'ok' : c.error?.kind}`),
+  });
+  await runMatch({ question: '先做什么？', fighters, judge: 'mock/judge', chair: 'mock/chair', maxRounds: 1 }, brains, rec);
+
+  const types = rec.events.map(e => e.type);
+  assert.ok(types.includes('final') && types.at(-1) === 'match_ended');
+  assert.equal(rec.events.filter(e => e.type === 'claim').length, 3, '额度用尽的 KIMI 没有论点，其余 3 人各一个');
+  assert.ok(calls.some(c => c.endsWith(':draft:bad_output')), '格式错误被记录');
+  assert.ok(calls.some(c => c.endsWith(':act:rate_limit')), '限流被记录');
+  assert.equal(calls.filter(c => c.startsWith('kimi:')).every(c => c.endsWith('quota')), true);
+  assert.equal(calls.filter(c => c === 'kimi:draft:quota').length, 1, '额度用尽不重试');
+  const crit = rec.events.find(e => e.type === 'ruling' && e.crit);
+  assert.ok(crit, '证据核对通过 + 裁决成立 = 暴击');
+  const fin = rec.events.find(e => e.type === 'final');
+  assert.ok(fin?.type === 'final' && fin.answer.includes('先做 A'));
+});

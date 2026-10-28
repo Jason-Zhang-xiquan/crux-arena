@@ -614,14 +614,19 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 - [ ] GitHub、Show HN、r/LocalLLaMA、X、B站 / YouTube
 
 ### Phase 4 — 接入真实模型（最后做，见 §6）
-- [ ] **外壳先行（不发真实请求）**：通道接口 + 模拟通道（可模拟限流、额度用尽、超时、拒答、格式错误），把下面的预算、降级、退场、暂停、续打全部用它测通
+- [x] 通道接口 + 模拟通道测试（格式错误重试、限流重试、额度用尽不重试、并发闸门）；`packages/channels`
+- [ ] 模拟通道补齐超时、拒答，并用它测通降级、退场、暂停、续打
 - [ ] 通道三种方式：命令行模板、兼容 API、脚本协议（§6.7）；统一返回 usage（输入 / 输出 / 思考 / 缓存，或标为估算）
 - [ ] 内置预设（Claude Code、Cursor Agent、Codex CLI、OpenRouter、Ollama）+ `crux channel probe` 自动探测
 - [ ] 写给 AI 的接入说明 `docs/channels.md` + 三种模板 + `crux channel test` 验收（含 `--mock`）；设置页"添加通道"
-- [ ] 第一批真实通道：Claude Code（CLAUDE）、Cursor Agent（CODEX / GROK / GEMINI / KIMI / GLM / DEEPSEEK）
-- [ ] 基于提示词的 LLM 大脑：盲答、分歧提取、动作（结构化输出 + 校验重试）、裁判、主席
-- [ ] 推理强度五档与各家参数映射；按角色、按阶段的默认值
-- [ ] 四层预算：单次、单选手、单场、每日 / 每月；冠军答案预留 15%；开赛前估价与降级建议
+- [x] 第一批真实通道：Cursor Agent（ask 只读模式，8 名选手：CLAUDE / CODEX / GROK / GEMINI / MUSE / DEEPSEEK / KIMI / GLM）；Claude Code（已接，登录后自动优先给 CLAUDE 用）。不经过 shell、提示词只走标准输入、空沙箱目录启动
+- [x] 首场真实 8 人混战（2026-10-28）：`crux fight --real`，存档含 events.jsonl / battle-log.md / calls.jsonl（每次调用的提示词、原始输出、模型、用量、耗时）
+- [x] 录屏：`node packages/desktop/scripts/record.ts <存档>`，桌面版 `--replay --backdrop --exit-after-replay` + ffmpeg 只录竞技场区域
+- [x] 基于提示词的 LLM 大脑：盲答、分歧提取、动作（结构化输出 + 校验重试）、裁判、主席；文件证据由引擎读原文核对，不信模型自报
+- [x] 推理强度五档映射（Cursor：按模型名后缀取最接近的一档；Claude Code：`--effort`）
+- [ ] 按角色、按阶段的推理档位默认值
+- [x] 单场预算：剩余预算不够打完整一回合就不开新回合，冠军答案预留 15%
+- [ ] 其余预算层：单次、单选手、每日 / 每月；开赛前估价与降级建议
 - [ ] 错误分类、重试与降级链；选手退场；裁判 / 主席自动顶替
 - [ ] 暂停与断点续打（`crux resume`）；开赛前通道预检
 - [ ] 设置页"模型与额度"：API key（系统钥匙串）、默认模型、推理档位、降级链、花费上限

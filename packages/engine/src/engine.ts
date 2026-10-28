@@ -56,6 +56,7 @@ export type Recorder = ReturnType<typeof createRecorder>;
 const ZERO: Tokens = { in: 0, out: 0 };
 const addTokens = (a: Tokens, b: Tokens): Tokens => ({ in: a.in + b.in, out: a.out + b.out });
 const ROUND_COST_PER_FIGHTER = 2500;   // 还没有实测数据时，用来估算"省下多少"
+const FINAL_RESERVE = 0.15;            // 整场预算留给冠军答案的比例（PLAN §6.4）
 
 export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder = createRecorder()): Promise<Recorder> {
   const { emit, state: s } = rec;
@@ -107,7 +108,8 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
   } else {
     let actionNo = 0;
     for (let round = 1; round <= maxRounds; round++) {
-      if (s.tokens >= budget) break;
+      // 预算不够打完整一回合就不开新回合（按上一回合的实际花费估算），并给冠军答案留 15%
+      if (s.tokens + lastRoundTokens > budget * (1 - FINAL_RESERVE)) break;
       emit({ type: 'round_started', round });
       const before = s.tokens;
       let progressed = false;
@@ -127,7 +129,7 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
       }
 
       for (const f of active) {
-        if (s.tokens >= budget) break;
+        if (s.tokens >= budget * (1 - FINAL_RESERVE)) break;   // 回合中途也守住冠军答案的预留
         let out = await brains.act(f, boardView(s, f.id));
         let spent = out.tokens;
         const problems = (list: ActionDraft[]) => {
@@ -184,7 +186,7 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
       if (round === maxRounds) emit({ type: 'converged', round, reason: 'max_rounds', savedTokens: 0 });
     }
     if (!s.converged) {
-      emit({ type: 'flag', kind: 'budget', note: `已用 ${s.tokens} tokens，达到预算 ${budget}，直接进入冠军答案` });
+      emit({ type: 'flag', kind: 'budget', note: `已用 ${s.tokens} tokens，剩余预算（共 ${budget}）不够再打一回合，直接进入冠军答案` });
       emit({ type: 'converged', round: s.round, reason: 'budget', savedTokens: 0 });
     }
   }

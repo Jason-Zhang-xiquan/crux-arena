@@ -41,7 +41,7 @@ export const MatchStarted = z.object({
   matchId: z.string().min(1),
   question: z.string().min(1),
   mode: Mode,
-  fighters: z.array(FighterSpec).min(2).max(6),
+  fighters: z.array(FighterSpec).min(2).max(8),
   judge: z.string(),
   chair: z.string(),
   budget: z.number().int().positive(),

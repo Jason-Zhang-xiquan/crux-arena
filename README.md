@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-f5c542?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2023.6-3ddc84?style=flat-square)](package.json)
 [![Status](https://img.shields.io/badge/status-Phase%200%20%E2%80%A2%20engine%20ready-a78bfa?style=flat-square)](PLAN.md)
-[![Tests](https://img.shields.io/badge/tests-26%20passing-4cc9f0?style=flat-square)](#-快速开始)
+[![Tests](https://img.shields.io/badge/tests-30%20passing-4cc9f0?style=flat-square)](#-快速开始)
 
 ### [▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/) · [⬇ 下载桌面版（Windows）](https://github.com/Jason-Zhang-xiquan/crux-arena/releases)
 
@@ -151,6 +151,10 @@ npm run desktop:dist       # 打 Windows 安装包，输出到 packages/desktop/
 
 ```bash
 npm run crux -- fight "该不该拆微服务？" --team claude,doubao,kimi --mode team --dir .
+
+# 真实模型（本机已登录的 Cursor Agent / Claude Code；会消耗你的会员额度）
+npm run crux -- fight "问题" --real --team claude,codex,grok,kimi --rounds 2 --budget 300000 --dir . --context PLAN.md:12-41
+node packages/desktop/scripts/record.ts <存档文件夹>      # 把回放录成视频（Windows，需要 ffmpeg）
 npm run demo               # 固定剧本演示赛（和网页原型同一场）
 npm test                   # 引擎、文件夹工具、本地开打的测试
 npm run typecheck
@@ -168,6 +172,7 @@ npm run crux -- ws . grep "WHY_LIMIT"                          # 只读：搜索
 packages/
   engine/      事件 schema · 状态推导 · 引擎状态机 · 规则 · battle-log 生成器 · 演示大脑
   workspace/   只读文件夹工具（沙箱、屏蔽、预算、证据柜、审计）
+  channels/    模型通道（Cursor Agent、Claude Code）+ LLM 大脑：提示词、结构化输出、重试、证据核对
   cli/         crux 命令行 + 本地开打（CLI 和桌面版共用）
   desktop/     Electron 桌面版：托盘、全局快捷键、输入框、任务栏上方的竞技场
   sprites/     13 个吉祥物的像素精灵（网页原型和桌面版共用）
@@ -179,6 +184,7 @@ PLAN.md        完整方案：调研、机制、日志规范、视觉、路线�
 
 - [x] **Phase 0**：引擎状态机、事件 schema、battle-log 生成器、只读文件夹工具、CLI、测试
 - [x] **桌面版**：快捷键唤出、任务栏上方的事件驱动竞技场、冠军答案卡片、文件夹只读侦察、存档、自测截图
+- [x] **真实模型（第一批）**：Cursor Agent 里的 8 名选手 + Claude Code；每次调用记进 calls.jsonl；回放录屏脚本
 - [x] 桌面版回放、设置页（自定义快捷键）、Windows 安装包
 - [ ] 安装包代码签名、自动更新、macOS 版
 - [ ] 接入真实模型（OpenRouter / 各家直连 / Ollama）+ 评测：单模型 vs 多数投票 vs 竞技场

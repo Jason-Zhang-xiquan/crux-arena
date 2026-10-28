@@ -6,12 +6,15 @@ import { parseArgs } from 'node:util';
 import { ScriptedBrains, createRecorder, demoConfig, demoScript, parseEventLines, renderBattleLog, runMatch } from '@crux/engine';
 import { WorkspaceError, openWorkspace } from '@crux/workspace';
 import { runLocalMatch } from './match.ts';
+import { realBrains } from './real.ts';
 
 const HELP = `crux · AI 竞技场命令行（Phase 0）
 
 用法：
   crux fight "问题" [--team claude,codex,gemini,deepseek] [--mode ffa|team] [--dir 文件夹] [--out matches]
-                                             开打（目前用演示大脑），写出 events.jsonl 和 battle-log.md
+                                             开打（默认演示大脑），写出 events.jsonl 和 battle-log.md
+       --real [--effort low] [--rounds 2] [--budget 300000] [--context 文件:起-止,…]
+                                             用真实模型（本机 Claude Code / Cursor Agent），另写 calls.jsonl
   crux demo [--out matches] [--quiet]        跑固定剧本的演示赛（和网页原型同一场）
   crux log <events.jsonl>                    从事件文件重新生成 battle-log.md 并打印
   crux ws <文件夹> map                        打印仓库地图
@@ -36,6 +39,11 @@ async function main(argv: string[]) {
       team: { type: 'string', default: 'claude,codex,gemini,deepseek' },
       mode: { type: 'string', default: 'ffa' },
       dir: { type: 'string' },
+      real: { type: 'boolean', default: false },
+      effort: { type: 'string', default: 'low' },
+      rounds: { type: 'string' },
+      budget: { type: 'string' },
+      context: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -47,10 +55,28 @@ async function main(argv: string[]) {
     if (!question) throw new Error('用法：crux fight "问题" [--team …] [--mode ffa|team] [--dir 文件夹]');
     if (values.mode !== 'ffa' && values.mode !== 'team') throw new Error('--mode 只能是 ffa 或 team');
     const team = values.team.split(',').map(x => x.trim()).filter(Boolean);
-    if (team.length < 2 || team.length > 6) throw new Error('--team 需要 2–6 名选手');
-    const r = await runLocalMatch({ question, team, mode: values.mode, dir: values.dir, outDir: values.out });
+    if (team.length < 2 || team.length > 8) throw new Error('--team 需要 2–8 名选手');
+    const effort = values.effort;
+    if (!['off', 'low', 'medium', 'high', 'max'].includes(effort)) throw new Error('--effort 只能是 off / low / medium / high / max');
+    const context = (values.context ?? '').split(',').filter(Boolean).map(s => {
+      const m = s.match(/^(.+?):(\d+)-(\d+)$/);
+      if (!m) throw new Error(`--context 格式应为 文件:起-止，收到 ${s}`);
+      return { path: m[1], from: Number(m[2]), to: Number(m[3]) };
+    });
+    const t0 = Date.now();
+    const r = await runLocalMatch({
+      question, team, mode: values.mode, dir: values.dir, outDir: values.out,
+      ...(values.rounds ? { maxRounds: Number(values.rounds) } : {}),
+      ...(values.budget ? { budget: Number(values.budget) } : {}),
+      ...(values.real ? {
+        brains: realBrains({
+          effort: effort as 'low', context,
+          onCall: c => console.error(`[${((Date.now() - t0) / 1000).toFixed(0)}s] #${c.n} ${c.role} ${c.task} ${c.model} ${c.ok ? `ok ${c.usage?.in}/${c.usage?.out} tok` : `✗ ${c.error?.kind}: ${c.error?.message.slice(0, 80)}`} ${(c.ms / 1000).toFixed(1)}s`),
+        }),
+      } : {}),
+    });
     if (!values.quiet) console.log(r.battleLog);
-    console.log(`已写出 ${r.eventsFile} 和 ${r.logFile}（${r.events.length} 个事件，演示大脑）`);
+    console.log(`已写出 ${r.eventsFile} 和 ${r.logFile}（${r.events.length} 个事件，${values.real ? '真实模型' : '演示大脑'}）`);
     return;
   }
 
