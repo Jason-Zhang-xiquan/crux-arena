@@ -1,6 +1,9 @@
 // 预加载脚本：只把需要的几个 IPC 暴露给页面，页面本身拿不到 Node 和文件系统。
 const { contextBridge, ipcRenderer } = require('electron');
 
+// 用户自定义的形象和选手：页面脚本（mascots.js）加载时同步读取
+contextBridge.exposeInMainWorld('cruxCustom', ipcRenderer.sendSync('custom:get'));
+
 contextBridge.exposeInMainWorld('crux', {
   // 设置
   settings: () => ipcRenderer.invoke('settings:get'),
@@ -27,4 +30,10 @@ contextBridge.exposeInMainWorld('crux', {
   replayCurrent: () => ipcRenderer.send('arena:replay'),
   openMatch: () => ipcRenderer.send('arena:open-match'),
   copy: text => ipcRenderer.send('clipboard', String(text)),
+  // 通道：真实模型模式下哪些选手能上场
+  channels: () => ipcRenderer.invoke('channels:status'),
+  // 角落小窗（agent 拉起的后台对局）
+  onMini: cb => ipcRenderer.on('mini:update', (_e, d) => cb(d)),
+  miniExpand: () => ipcRenderer.send('mini:expand'),
+  miniClose: () => ipcRenderer.send('mini:close'),
 });

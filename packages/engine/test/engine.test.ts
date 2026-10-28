@@ -168,3 +168,13 @@ test('onStart 钩子在盲答前运行，工具审计进入事件流', async () 
   assert.equal(types.indexOf('tool_call'), 1);
   assert.match(renderBattleLog(rec.events), /只读，读取 1 次，写入 0 次/);
 });
+
+test('事件写入失败不会让后面的事件静默丢失，flush 时报错', async () => {
+  const written: number[] = [];
+  const rec = createRecorder({ sink: e => { if (e.seq === 1) throw new Error('磁盘满了'); written.push(e.seq); } });
+  rec.emit({ type: 'round_started', round: 0 });
+  rec.emit({ type: 'round_started', round: 1 });
+  rec.emit({ type: 'round_started', round: 2 });
+  await assert.rejects(rec.flush(), /磁盘满了/);
+  assert.deepEqual(written, [0, 2]);
+});

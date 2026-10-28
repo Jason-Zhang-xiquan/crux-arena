@@ -1,8 +1,9 @@
 // 命令行通道：会员命令行（Cursor Agent、Claude Code）以只读 / 问答模式启动。
-// 安全边界（PLAN §6.7）：不经过 shell；比赛内容只走标准输入；工作目录是空的沙箱目录；
+// 安全边界（PLAN §6.7）：不经过 shell；比赛内容只走标准输入；每次调用一个新的空目录；环境变量只给白名单；
 // 每次调用有超时和输出大小上限；通道进程拿不到用户的文件夹，文件由我们的只读工具读取。
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Channel, ChannelRequest, ChannelResult, Effort, ErrorKind } from './channel.ts';
@@ -16,8 +17,14 @@ export function runProcess(file: string, args: string[], o: { stdin?: string; en
   return new Promise(resolve => {
     const child = spawn(file, args, { cwd: o.cwd, env: o.env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     const out: Buffer[] = [], err: Buffer[] = [];
-    let size = 0, timedOut = false, tooLarge = false, done = false;
-    const kill = () => { try { child.kill(); } catch { /* 已退出 */ } };
+    let size = 0, timedOut = false, tooLarge = false, done = false, killed = false;
+    // 杀整棵进程树（Windows 上 child.kill 只杀直接子进程）；杀完 5 秒还没等到 close（比如有孙进程占着管道），就不等了
+    const kill = () => {
+      if (killed) return; killed = true;
+      if (process.platform === 'win32' && child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => child.kill());
+      else child.kill();
+      setTimeout(() => { child.stdout.destroy(); child.stderr.destroy(); finish(null, '\n（进程已终止，没有等到输出关闭）'); }, 5000).unref();
+    };
     const timer = setTimeout(() => { timedOut = true; kill(); }, o.timeoutMs ?? 180_000);
     const collect = (into: Buffer[]) => (b: Buffer) => { size += b.length; if (size > maxBytes) { tooLarge = true; kill(); } else into.push(b); };
     child.stdout.on('data', collect(out));
@@ -33,11 +40,16 @@ export function runProcess(file: string, args: string[], o: { stdin?: string; en
   });
 }
 
-/** 空的沙箱目录：命令行在这里启动，看不到任何用户文件 */
-export function sandboxDir(): string {
-  const dir = path.join(os.tmpdir(), 'crux-arena-sandbox');
-  mkdirSync(dir, { recursive: true });
-  return dir;
+/** 每次调用一个新的空目录：命令行在这里启动，看不到任何用户文件，也看不到上一次调用留下的东西 */
+export async function withSandbox<T>(fn: (dir: string) => Promise<T>): Promise<T> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'crux-sandbox-'));
+  try { return await fn(dir); } finally { await rm(dir, { recursive: true, force: true }).catch(() => { /* 进程刚退出时 Windows 可能还占着 */ }); }
+}
+
+/** 环境变量白名单：只给命令行运行和登录所需的系统变量，不把宿主进程的密钥、会话凭据（如 CLAUDE_*、ANTHROPIC_*、各种 API key）传下去 */
+const ENV_KEEP = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|USERNAME|USER|LOGNAME|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|PROGRAMW6432|COMMONPROGRAMFILES|ALLUSERSPROFILE|PUBLIC|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|NUMBER_OF_PROCESSORS|LANG|LANGUAGE|LC_[A-Z_]+|TZ|SHELL|TERM|XDG_[A-Z_]+|HTTPS?_PROXY|NO_PROXY|ALL_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR)$/i;
+export function minimalEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => ENV_KEEP.test(k))), ...extra };
 }
 
 const fail = (model: string, ms: number, kind: ErrorKind, message: string): ChannelResult =>
@@ -89,10 +101,11 @@ export function findCursorAgent(): { node: string; script: string } | undefined 
 export async function cursorChannel(o: { concurrency?: number; timeoutMs?: number } = {}): Promise<Channel & { models: Set<string> }> {
   const bin = findCursorAgent();
   if (!bin) throw new Error('没有找到 Cursor Agent（cursor-agent）');
-  const env = { ...process.env, CURSOR_INVOKED_AS: 'cursor-agent.cmd' };
-  const exec = (args: string[], stdin?: string, timeoutMs?: number) => runProcess(bin.node, [bin.script, ...args], { env, cwd: sandboxDir(), stdin, timeoutMs });
+  const env = minimalEnv({ CURSOR_INVOKED_AS: 'cursor-agent.cmd' });
+  const exec = (args: (dir: string) => string[], stdin?: string, timeoutMs?: number) =>
+    withSandbox(dir => runProcess(bin.node, [bin.script, ...args(dir)], { env, cwd: dir, stdin, timeoutMs }));
   // 只读模型列表：不发起对话、不耗额度
-  const list = await exec(['--list-models'], undefined, 60_000);
+  const list = await exec(() => ['--list-models'], undefined, 60_000);
   const models = new Set(list.stdout.split(/\r?\n/).map(l => l.match(/^([a-z0-9][\w.-]*) - /i)?.[1]).filter((x): x is string => !!x));
   return {
     id: 'cursor', concurrency: o.concurrency ?? 4, models,
@@ -100,7 +113,8 @@ export async function cursorChannel(o: { concurrency?: number; timeoutMs?: numbe
       const model = cursorModelFor(req.model, req.effort, models);
       if (!model) return fail(req.model, 0, 'unavailable', `Cursor 账号下没有 ${req.model}`);
       // ask 模式 = 只读问答；Cursor 没有单独的系统提示参数，系统提示放在标准输入开头
-      const r = await exec(['-p', '--output-format', 'json', '--mode', 'ask', '--trust', '--workspace', sandboxDir(), '--model', model],
+      // --trust 只是免去"信任这个工作区吗"的交互确认；工作区是这次调用新建的空目录
+      const r = await exec(dir => ['-p', '--output-format', 'json', '--mode', 'ask', '--trust', '--workspace', dir, '--model', model],
         `${req.system}\n\n---\n\n${req.prompt}`, req.timeoutMs ?? o.timeoutMs);
       const bad = processFailure(r, model);
       if (bad) return bad;
@@ -125,13 +139,12 @@ export function findClaudeCode(): string | undefined {
   return existsSync(npm) ? npm : undefined;
 }
 
-/** 去掉宿主会话的环境变量（如在 Claude Code 里运行时继承的会话凭据），用用户自己的登录 */
-const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(CLAUDE|ANTHROPIC)/.test(k)));
 
 export async function claudeCodeChannel(o: { concurrency?: number; timeoutMs?: number } = {}): Promise<Channel & { loggedIn: boolean }> {
   const exe = findClaudeCode();
   if (!exe) throw new Error('没有找到 Claude Code（claude）');
-  const status = await runProcess(exe, ['auth', 'status'], { env: cleanEnv(), cwd: sandboxDir(), timeoutMs: 30_000 });
+  // 白名单环境变量也顺带去掉了宿主会话（如在 Claude Code 里运行时）的凭据，用的是用户自己的登录
+  const status = await withSandbox(dir => runProcess(exe, ['auth', 'status'], { env: minimalEnv(), cwd: dir, timeoutMs: 30_000 }));
   let loggedIn = false;
   try { loggedIn = !!JSON.parse(status.stdout).loggedIn; } catch { /* 旧版本没有 JSON 输出 */ }
   return {
@@ -140,7 +153,7 @@ export async function claudeCodeChannel(o: { concurrency?: number; timeoutMs?: n
       const effort = CLAUDE_EFFORT[req.effort];
       // 关掉所有工具、不存会话、不加载 MCP：纯问答
       const args = ['-p', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--strict-mcp-config', '--model', req.model, ...(effort ? ['--effort', effort] : []), '--system-prompt', req.system];
-      const r = await runProcess(exe, args, { env: cleanEnv(), cwd: sandboxDir(), stdin: req.prompt, timeoutMs: req.timeoutMs ?? o.timeoutMs });
+      const r = await withSandbox(dir => runProcess(exe, args, { env: minimalEnv(), cwd: dir, stdin: req.prompt, timeoutMs: req.timeoutMs ?? o.timeoutMs }));
       const bad = processFailure(r, req.model);
       if (bad) return bad;
       let j: { is_error?: boolean; result?: string; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };

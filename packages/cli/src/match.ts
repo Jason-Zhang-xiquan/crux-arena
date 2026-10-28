@@ -5,6 +5,8 @@ import path from 'node:path';
 import { DemoBrains, createRecorder, fighterSpecs, renderBattleLog, runMatch } from '@crux/engine';
 import type { Brains, FighterSpec, MatchEvent, Recorder } from '@crux/engine';
 import { openWorkspace } from '@crux/workspace';
+import type { MatchMeta } from './jobs.ts';
+import { writeMeta } from './jobs.ts';
 
 type Workspace = Awaited<ReturnType<typeof openWorkspace>>;
 
@@ -26,6 +28,8 @@ export interface LocalMatchOptions {
   outDir: string;                    // 存档根目录，每场一个子文件夹
   onEvent?: (e: MatchEvent) => void; // 每产生一个事件就回调（桌面版用它驱动画面）
   brains?: BrainsFactory;            // 不传就用演示大脑
+  matchId?: string;                  // 后台开打时由发起方先定好编号
+  meta?: MatchMeta;                  // 写进 meta.json：谁发起、怎么显示（桌面版据此接管画面）
   budget?: number;
   maxRounds?: number;
 }
@@ -40,12 +44,14 @@ export interface LocalMatchResult {
 }
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+export const newMatchId = () => `${stamp()}-${Math.random().toString(36).slice(2, 6)}`;
 
 export async function runLocalMatch(o: LocalMatchOptions): Promise<LocalMatchResult> {
   const mode = o.mode ?? 'ffa';
-  const matchId = `${stamp()}-${Math.random().toString(36).slice(2, 6)}`;
+  const matchId = o.matchId ?? newMatchId();
   const matchDir = path.join(o.outDir, matchId);
   await mkdir(matchDir, { recursive: true });
+  if (o.meta) await writeMeta(matchDir, o.meta);
   const eventsFile = path.join(matchDir, 'events.jsonl');
   await writeFile(eventsFile, '');
 

@@ -13,6 +13,9 @@
   },
   "exports": {
     "./match": "./src/match.ts",
-    "./real": "./src/real.ts"
+    "./real": "./src/real.ts",
+    "./settings": "./src/settings.ts",
+    "./jobs": "./src/jobs.ts",
+    "./mascots": "./src/mascots.ts"
   }
 }

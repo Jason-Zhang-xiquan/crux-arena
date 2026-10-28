@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@crux/cli": "0.0.0",
-    "@crux/engine": "0.0.0"
+    "@crux/engine": "0.0.0",
+    "@crux/channels": "0.0.0"
   },
   "devDependencies": {
     "electron": "44.7.1",

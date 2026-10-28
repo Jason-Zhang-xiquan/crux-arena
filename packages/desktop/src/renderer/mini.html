@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:">
+<title>Crux Arena</title>
+<script src="fonts.js"></script>
+<link href="ui.css" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+  #mini{position:absolute;inset:4px;background:#160f2e;border:3px solid #000;box-shadow:0 0 0 2px #6b5aa8,4px 4px 0 2px #000;color:#e9e2ff;padding:7px 9px;display:flex;flex-direction:column;gap:5px;cursor:pointer}
+  #mini.done{box-shadow:0 0 0 2px #ffd166,4px 4px 0 2px #000}
+  .row{display:flex;align-items:center;gap:6px;white-space:nowrap}
+  .tag{font-family:var(--px);font-size:7px;padding:2px 4px;border:2px solid #000;background:#ff4d6d;color:#fff}
+  .tag.done{background:#ffd166;color:#000}
+  #round{font-family:var(--px);font-size:8px;color:#ffd166}
+  #tok{margin-left:auto;font-size:11px;color:#b8a6ff}
+  #q{font-size:12px;overflow:hidden;text-overflow:ellipsis}
+  #faces{display:flex;gap:2px;height:28px;align-items:flex-end}
+  #faces canvas{image-rendering:pixelated;width:28px;height:28px}
+  #faces .ko{opacity:.35}
+  #last{font-size:11px;color:#cfc6ef;overflow:hidden;text-overflow:ellipsis}
+  .x{margin-left:4px;cursor:pointer;color:#b8a6ff;font-size:13px;line-height:1}
+  .x:hover{color:#fff}
+</style>
+</head>
+<body>
+  <div id="mini" title="点击展开竞技场">
+    <div class="row"><span class="tag" id="state">LIVE</span><span id="round">ROUND 0</span><span id="tok">0 tok</span><span class="x" id="close" title="收起（比赛继续在后台跑）">✕</span></div>
+    <div class="row" id="q"></div>
+    <div class="row"><div id="faces"></div><div id="last"></div></div>
+  </div>
+<script src="../../../sprites/mascots.js"></script>
+<script src="mini.js"></script>
+</body>
+</html>

@@ -61,7 +61,7 @@ export function renderBattleLog(events: MatchEvent[]): string {
         row('', e.round, '略', teamTag(e.actor) + name(e.actor), `${pad(e.reason, 40)}${e.savedTokens ? `省 ${fmtK(e.savedTokens)} tok` : ''}`);
         break;
       case 'converged': {
-        const why = { flawless: '无分歧，FLAWLESS VICTORY', settled: '立场收敛，提前结束', budget: '预算用尽，直接综合', max_rounds: '打满回合，进入综合' }[e.reason];
+        const why = { flawless: '无分歧，FLAWLESS VICTORY', settled: '立场收敛，提前结束', budget: '预算用尽，直接综合', max_rounds: '打满回合，进入综合', forfeit: '交出盲答的不到 2 人，对局无效' }[e.reason];
         row('', e.round, '裁', 'JUDGE', `${pad(why, 40)}${e.savedTokens ? `省 ~${fmtK(e.savedTokens)} tok` : ''}`);
         break;
       }

@@ -25,6 +25,8 @@ function msg(text, kind) { const m = $('#keyMsg'); m.textContent = text; m.class
 function render() {
   $('#key').textContent = s.hotkeyActive || '未注册';
   document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === s.speed));
+  for (const k of ['brains', 'effort', 'agentDisplay']) document.querySelectorAll(`#${k} button`).forEach(b => b.classList.toggle('on', b.dataset.v === s[k]));
+  for (const k of ['rounds', 'budget']) document.querySelectorAll(`#${k} button`).forEach(b => b.classList.toggle('on', Number(b.dataset.v) === s[k]));
   document.querySelectorAll('#logPanel button').forEach(b => b.classList.toggle('on', b.dataset.v === s.logPanel));
   $('#matches').textContent = s.matchesDir || `${s.defaultMatchesDir}（默认）`;
   $('#matches').title = s.matchesDir || s.defaultMatchesDir;
@@ -55,6 +57,18 @@ $('#auto').onclick = async () => { const r = await save({ hotkey: '' }); msg(r.o
 
 document.querySelectorAll('#speed button').forEach(b => { b.onclick = () => save({ speed: Number(b.dataset.v) }); });
 document.querySelectorAll('#logPanel button').forEach(b => { b.onclick = () => save({ logPanel: b.dataset.v }); });
+for (const k of ['brains', 'effort', 'agentDisplay']) document.querySelectorAll(`#${k} button`).forEach(b => { b.onclick = () => save({ [k]: b.dataset.v }).then(k === 'effort' || k === 'brains' ? showChannels : undefined); });
+for (const k of ['rounds', 'budget']) document.querySelectorAll(`#${k} button`).forEach(b => { b.onclick = () => save({ [k]: Number(b.dataset.v) }); });
+
+/** 真实模型模式下列出每名选手实际会用的模型（只读探测，第一次要几秒） */
+async function showChannels() {
+  const m = $('#chanMsg');
+  if (s.brains !== 'real') { m.textContent = '演示大脑：不调用任何模型，不花额度，所有问题打同一套演示剧本。'; return; }
+  m.textContent = '正在探测本机通道…';
+  const c = await window.crux.channels();
+  const list = Object.entries(c.models);
+  m.textContent = list.length ? `能上场 ${list.length} 人：${list.map(([id, model]) => `${id.toUpperCase()}=${model.split('/').pop()}`).join('，')}` : '本机没有可用通道：需要已登录的 Cursor Agent 或 Claude Code。';
+}
 $('#autoLaunch').onchange = e => save({ autoLaunch: e.target.checked });
 $('#changeDir').onclick = async () => { const d = await window.crux.pickFolder('选择存档文件夹'); if (d) save({ matchesDir: d }); };
 $('#resetDir').onclick = () => save({ matchesDir: '' });
@@ -63,4 +77,4 @@ $('#replayPick').onclick = () => window.crux.pickReplay();
 $('#repo').onclick = e => { e.preventDefault(); window.crux.openPath('repo'); };
 $('#close').onclick = () => window.crux.closeSettings();
 
-window.crux.settings().then(v => { s = v; render(); if (s.hotkeyError) msg(s.hotkeyError, 'bad'); });
+window.crux.settings().then(v => { s = v; render(); if (s.hotkeyError) msg(s.hotkeyError, 'bad'); showChannels(); });

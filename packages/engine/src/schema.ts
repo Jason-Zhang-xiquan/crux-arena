@@ -141,7 +141,7 @@ export const Converged = z.object({
   ...base,
   type: z.literal('converged'),
   round: z.number().int().nonnegative(),
-  reason: z.enum(['flawless', 'settled', 'budget', 'max_rounds']),
+  reason: z.enum(['flawless', 'settled', 'budget', 'max_rounds', 'forfeit']),   // forfeit：交出盲答的不到 2 人，对局无效
   savedTokens: z.number().int().nonnegative(),
 });
 

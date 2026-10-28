@@ -1,6 +1,7 @@
 // 输入框：写问题、选文件夹（只读）、选模式和选手，Ctrl+Enter 开打。
 const $ = s => document.querySelector(s);
-const MAX = 6;
+const MAX = 8;
+let channels = { real: false, models: {} };   // 真实模型模式下：选手 → 实际模型；不在里面的没有通道
 let state = { team: [], mode: 'ffa', dir: '' };
 const tiles = {};
 const teamColor = i => (i % 2 ? '#4cc9f0' : '#ff4d6d');
@@ -17,6 +18,7 @@ for (const r of ROSTER) {
 }
 
 function toggle(id) {
+  if (channels.real && !channels.models[id]) { $('#err').textContent = `${id.toUpperCase()} 在本机没有通道（设置里可以换成演示大脑）`; return; }
   const i = state.team.indexOf(id);
   if (i >= 0) state.team.splice(i, 1); else if (state.team.length < MAX) state.team.push(id);
   render();
@@ -26,6 +28,9 @@ function render() {
   for (const [id, t] of Object.entries(tiles)) {
     const i = state.team.indexOf(id);
     t.el.classList.toggle('sel', i >= 0);
+    const off = channels.real && !channels.models[id];
+    t.el.classList.toggle('off', off);
+    t.el.title = off ? `${id.toUpperCase()} · 无通道` : channels.real ? `${id.toUpperCase()} · ${channels.models[id]}` : t.el.title;
     const b = t.el.querySelector('.badge');
     b.textContent = i < 0 ? '' : state.mode === 'team' ? (i % 2 ? 'B' : 'R') + (Math.floor(i / 2) + 1) : 'P' + (i + 1);
     b.style.setProperty('--b', state.mode === 'team' && i >= 0 ? teamColor(i) : '');
@@ -77,7 +82,12 @@ setInterval(() => {
   for (const [id, t] of Object.entries(tiles)) drawPose(t.canvas, t.kind, state.team.includes(id) && frame % 2 ? 'idle2' : 'idle');
 }, 450);
 
-window.crux.onShown(() => { $('#err').textContent = ''; $('#recent').hidden = true; $('#q').focus(); $('#q').select(); });
+const loadChannels = () => window.crux.channels().then(c => {
+  channels = c;
+  if (c.real) $('#brainNote').innerHTML = `<b>真实模型</b>：走本机已登录的通道，能上场 ${Object.keys(c.models).length} 人，会消耗你的会员额度；文件夹只读。`;
+  render();
+});
+window.crux.onShown(() => { $('#err').textContent = ''; $('#recent').hidden = true; $('#q').focus(); $('#q').select(); loadChannels(); });
 
 window.crux.settings().then(s => {
   state = { team: s.team.filter(id => tiles[id]).slice(0, MAX), mode: s.mode, dir: s.dir };
@@ -86,4 +96,5 @@ window.crux.settings().then(s => {
   render();
   $('#q').focus();
   $('#q').select();
+  loadChannels();
 });

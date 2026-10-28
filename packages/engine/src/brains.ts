@@ -56,6 +56,7 @@ export interface CruxOut {
 }
 
 export interface RulingOut { verdict: Verdict; text: string; evidenceOk: boolean; tokens: Tokens }
+export type RuleInput = BoardAction & { steelman?: string; detail: string; evidence: Evidence[] };
 export interface FinalOut { answer: string; minority: string[]; userCruxes: string[]; confidence: number; tokens: Tokens }
 
 export interface Brains {
@@ -63,6 +64,8 @@ export interface Brains {
   /** feedback 非空表示上一次输出不合规，要求修正一次 */
   act(fighter: FighterSpec, view: BoardView, feedback?: string[]): Promise<ActOut>;
   crux(view: BoardView): Promise<CruxOut>;
-  rule(action: BoardAction & { steelman?: string; detail: string; evidence: Evidence[] }, view: BoardView): Promise<RulingOut>;
+  rule(action: RuleInput, view: BoardView): Promise<RulingOut>;
+  /** 可选：一回合的攻守攒到回合末尾一次判完（省调用；裁判也能把攻和守放在一起看）。顺序与输入一致 */
+  ruleRound?(actions: RuleInput[], view: BoardView): Promise<{ rulings: Array<Omit<RulingOut, 'tokens'>>; tokens: Tokens }>;
   final(view: BoardView): Promise<FinalOut>;
 }

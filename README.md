@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-f5c542?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2023.6-3ddc84?style=flat-square)](package.json)
 [![Status](https://img.shields.io/badge/status-Phase%200%20%E2%80%A2%20engine%20ready-a78bfa?style=flat-square)](PLAN.md)
-[![Tests](https://img.shields.io/badge/tests-30%20passing-4cc9f0?style=flat-square)](#-快速开始)
+[![Tests](https://img.shields.io/badge/tests-44%20passing-4cc9f0?style=flat-square)](#-快速开始)
 
 ### [▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/) · [⬇ 下载桌面版（Windows）](https://github.com/Jason-Zhang-xiquan/crux-arena/releases)
 
@@ -166,13 +166,35 @@ npm run crux -- ws . map                                       # 只读：仓库
 npm run crux -- ws . grep "WHY_LIMIT"                          # 只读：搜索
 ```
 
+## 🤖 从任何 agent 拉起对局
+
+在 Claude Code 里说一句"跟 codex、gemini 和 deepseek 讨论一下这套代码的 bugs 和可行性"，它就会在后台开一场对局：画面缩在屏幕角落（也可以设成完整竞技场或纯后台），打完把冠军答案、少数派和"谁说服了谁"带回对话。
+
+```bash
+cd packages/cli && npm link     # 全局 crux 命令
+crux setup                      # 安装 Claude Code skill
+crux fight "这套代码有哪些 bug？" --team claude,codex,gemini,deepseek --dir . --detach
+crux result latest --wait
+```
+
+Cursor、Codex 等其他 agent：把 [docs/agents.md](docs/agents.md) 里的一段说明加进它们的规则文件即可。
+
+## 🧩 接自己的 AI、画自己的形象
+
+- **自定义通道**：在 `channels.json` 里接任何模型，支持三种方式：兼容 OpenAI 的 API（OpenRouter、Ollama、各家平台）、命令行模板、脚本协议。也可以改自带选手走哪条通道，或指定裁判、主席用什么模型。见 [docs/channels.md](docs/channels.md)。
+- **自定义形象**：每个 AI 是一张 24×20、四个姿势的像素表。`crux mascot export claude` 把自带形象导出来改，`crux mascot new` 给新 AI 画，`crux mascot preview` 出预览图。见 [docs/mascots.md](docs/mascots.md)。
+
+<img src="docs/assets/mascot-llama.png" alt="自定义形象示例：小羊驼的四个姿势" width="520">
+
+在 Claude Code 里直接说"把我的 ollama 接进竞技场""给我的 llama 画个形象"即可；`crux setup` 会装好对应的 skill。
+
 ## 🗂️ 项目结构
 
 ```text
 packages/
   engine/      事件 schema · 状态推导 · 引擎状态机 · 规则 · battle-log 生成器 · 演示大脑
   workspace/   只读文件夹工具（沙箱、屏蔽、预算、证据柜、审计）
-  channels/    模型通道（Cursor Agent、Claude Code）+ LLM 大脑：提示词、结构化输出、重试、证据核对
+  channels/    模型通道（Cursor Agent、Claude Code、自定义：API / 命令行 / 脚本）+ LLM 大脑
   cli/         crux 命令行 + 本地开打（CLI 和桌面版共用）
   desktop/     Electron 桌面版：托盘、全局快捷键、输入框、任务栏上方的竞技场
   sprites/     13 个吉祥物的像素精灵（网页原型和桌面版共用）
@@ -185,6 +207,7 @@ PLAN.md        完整方案：调研、机制、日志规范、视觉、路线�
 - [x] **Phase 0**：引擎状态机、事件 schema、battle-log 生成器、只读文件夹工具、CLI、测试
 - [x] **桌面版**：快捷键唤出、任务栏上方的事件驱动竞技场、冠军答案卡片、文件夹只读侦察、存档、自测截图
 - [x] **真实模型（第一批）**：Cursor Agent 里的 8 名选手 + Claude Code；每次调用记进 calls.jsonl；回放录屏脚本
+- [x] **从 agent 拉起**：`crux fight --detach` / `crux result --wait`、Claude Code skill、角落小窗；裁判每回合一次裁决、立场视角、选手按需读文件
 - [x] 桌面版回放、设置页（自定义快捷键）、Windows 安装包
 - [ ] 安装包代码签名、自动更新、macOS 版
 - [ ] 接入真实模型（OpenRouter / 各家直连 / Ollama）+ 评测：单模型 vs 多数投票 vs 竞技场

@@ -307,7 +307,7 @@ const H = {
   },
   async converged(e) {
     S.saved += e.savedTokens;
-    const text = { flawless: ['FLAWLESS', '没有分歧，直接出答案'], settled: ['FINISH', '立场收敛 · 提前结束'], budget: ['TIME UP', '预算用尽，直接综合'], max_rounds: ['FINISH', '打满回合，进入综合'] }[e.reason];
+    const text = { flawless: ['FLAWLESS', '没有分歧，直接出答案'], settled: ['FINISH', '立场收敛 · 提前结束'], budget: ['TIME UP', '预算用尽，直接综合'], max_rounds: ['FINISH', '打满回合，进入综合'], forfeit: ['NO CONTEST', '交出盲答的不到 2 人，对局无效'] }[e.reason];
     logLine({ who: 'judge', name: 'JUDGE', color: '#b8a6ff', round: e.round, tag: '裁', tagc: 'jdg', why: text[1], res: e.savedTokens ? `+${fmtK(e.savedTokens)} tok` : '', resc: 'save' });
     for (const id in S.fighters) { S.fighters[id].el.classList.remove('dim'); setStatus(id, ''); }
     bubble?.remove();

@@ -622,6 +622,15 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 - [x] 第一批真实通道：Cursor Agent（ask 只读模式，8 名选手：CLAUDE / CODEX / GROK / GEMINI / MUSE / DEEPSEEK / KIMI / GLM）；Claude Code（已接，登录后自动优先给 CLAUDE 用）。不经过 shell、提示词只走标准输入、空沙箱目录启动
 - [x] 首场真实 8 人混战（2026-10-28）：`crux fight --real`，存档含 events.jsonl / battle-log.md / calls.jsonl（每次调用的提示词、原始输出、模型、用量、耗时）
 - [x] 录屏：`node packages/desktop/scripts/record.ts <存档>`，桌面版 `--replay --backdrop --exit-after-replay` + ffmpeg 只录竞技场区域
+- [x] 省 token：裁判每回合合并成一次裁决（原来每个动作一次）
+- [x] 有分歧：盲答时按出场顺序分配立场视角（代码审查 / 决策两套，按问题自动选）
+- [x] 选手盲答前可以请求读文件（每人一次、最多 3 段、每段 ≤120 行），走只读工具和审计；交锋时继续给他看
+- [x] **从任何 agent 拉起对局**（docs/agents.md）：`crux fight --detach` 后台开打、`crux result --wait` 取回冠军答案；Claude Code skill（`crux setup` 安装）；Cursor / Codex 用 AGENTS.md 说明
+- [x] 自审修复（来自一场 4 人代码审查对局，逐条核实后修）：交出盲答不到 2 人判"对局无效"而不是完美收敛；每次调用新建空沙箱目录、环境变量白名单（不再把宿主会话凭据传给命令行）；超时杀整棵进程树并兜底返回；事件写入失败不再静默丢事件；JSON 解析容忍尾随文字
+- [ ] 只读工具的符号链接 TOCTOU（需要有人在比赛进行中改仓库，风险低）
+- [x] 自定义通道（§6.7 三种方式落地）：`channels.json` 里的 openai / command / script 通道；自定义选手、改自带选手的通道、指定裁判 / 主席；`crux channel list|test`；模拟选手脚本（零成本试跑）；docs/channels.md + crux-channel skill
+- [x] 自定义形象：24×20 四姿势像素表（docs/mascots.md），同编号覆盖自带形象；`crux mascot export|new|check|preview|reset`；新选手没画形象时用同色史莱姆；桌面版托盘"重新加载"；crux-mascot skill
+- [x] 桌面版接管 agent 拉起的对局：完整竞技场 / 角落小窗 / 纯后台；没开时自动在后台拉起；设置页"模型与额度""agent 对局"，与 CLI 共用默认值
 - [x] 基于提示词的 LLM 大脑：盲答、分歧提取、动作（结构化输出 + 校验重试）、裁判、主席；文件证据由引擎读原文核对，不信模型自报
 - [x] 推理强度五档映射（Cursor：按模型名后缀取最接近的一档；Claude Code：`--effort`）
 - [ ] 按角色、按阶段的推理档位默认值

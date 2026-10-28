@@ -210,7 +210,41 @@ const ROSTER = [
   {id:'glm', kind:'prism', name:'GLM',      zh:'光谱棱镜',   maker:'智谱',             color:'#8fb4ff', region:'cn',   idea:'"智谱 ≈ 光谱"：白光射进棱镜，分成彩虹射向对手。'},
   {id:'minimax', kind:'conch', name:'MINIMAX',  zh:'小海螺',     maker:'MiniMax · 海螺',   color:'#ff7a93', region:'cn',   idea:'致敬"海螺 AI"：粉色螺旋小海螺，花纹会转。'},
 ];
-function drawPose(c, kind, pose){ const g = c.getContext('2d'); g.clearRect(0, 0, MW, MH); MASCOTS[kind](g, pose || 'idle'); }
+/* ---------- 自定义形象（数据格式见 docs/mascots.md） ---------- */
+// 用户自己画的形象是 24×20 的像素表：palette 把字符映射成颜色（"." 是透明），poses 是四个姿势的 20 行字符串。
+// id 和自带角色相同就覆盖它的形象（名字、颜色等没写的沿用自带的），不同就是新角色。
+const POSES = ['idle', 'idle2', 'atk', 'hurt'];
+function registerMascot(m){
+  const kind = 'custom:' + m.id;
+  MASCOTS[kind] = (g, pose) => {
+    (m.poses[pose] || m.poses.idle).forEach((row, y) => { for (let x = 0; x < MW; x++) { const c = m.palette[row[x]]; if (c) rect(g, x, y, 1, 1, c); } });
+  };
+  const own = Object.fromEntries(['name', 'zh', 'maker', 'color', 'idea'].filter(k => m[k]).map(k => [k, m[k]]));
+  const i = ROSTER.findIndex(r => r.id === m.id);
+  if (i >= 0) ROSTER[i] = { ...ROSTER[i], ...own, kind, custom: true };
+  else ROSTER.push({ id: m.id, name: m.id.toUpperCase(), zh: '', maker: '', color: '#c9c2e8', region: 'custom', idea: '', ...own, kind, custom: true });
+}
+// 用户加了新 AI 但还没画形象：先用一只同色的小史莱姆顶上
+function registerFighter(f){
+  if (ROSTER.some(r => r.id === f.id)) return;
+  const color = f.color || '#9be37d', dark = '#00000055', e = '#1B1220';
+  const kind = 'slime:' + f.id;
+  MASCOTS[kind] = (g, pose) => {
+    const squash = pose === 'idle2' ? 1 : 0;
+    blob(g, 12, 12 + squash, 9, 7 - squash, (x, y) => (y > 15 ? dark : color));
+    blob(g, 8, 8 + squash, 2, 1.5, () => '#ffffff66');
+    eyePair(g, pose, [[8, 10 + squash], [14, 10 + squash]], e, 2, 3);
+    mouth(g, pose, 10, 15, e);
+  };
+  ROSTER.push({ id: f.id, kind, name: f.name || f.id.toUpperCase(), zh: '', maker: f.maker || '自定义', color, region: 'custom', idea: '还没有专属形象（crux mascot new 画一个）' });
+}
+// 桌面版预加载时把用户的形象和新选手放在 window.cruxCustom 里
+if (typeof window !== 'undefined' && window.cruxCustom) {
+  (window.cruxCustom.mascots || []).forEach(registerMascot);
+  (window.cruxCustom.fighters || []).forEach(registerFighter);
+}
+
+function drawPose(c, kind, pose){ const g = c.getContext('2d'); g.clearRect(0, 0, MW, MH); (MASCOTS[kind] || MASCOTS.crab)(g, pose || 'idle'); }
 function mascot(kind, pose, scale){
   const c = document.createElement('canvas'); c.width = MW; c.height = MH;
   drawPose(c, kind, pose);

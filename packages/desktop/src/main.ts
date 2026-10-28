@@ -1,12 +1,22 @@
 // Crux Arena 桌面版主进程：托盘常驻、全局快捷键唤出输入框、开打后小 AI 们在任务栏上方打架。
-// 引擎和只读文件夹工具直接在这里跑（目前用演示大脑），事件逐条推给桌面竞技场窗口。
+// 引擎和只读文件夹工具直接在这里跑（真实模型或演示大脑），事件逐条推给桌面竞技场窗口。
+// 也会接管 agent 用 crux fight 在后台拉起的对局：完整竞技场、角落小窗或不显示。
 import { BrowserWindow, Menu, Tray, app, clipboard, dialog, globalShortcut, ipcMain, nativeImage, screen, shell } from 'electron';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { unlinkSync } from 'node:fs';
+import { mkdir, open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FIGHTER_IDS, parseEventLines, renderBattleLog } from '@crux/engine';
-import type { MatchEvent } from '@crux/engine';
+import { FIGHTER_IDS, apply, initialState, parseEventLines, renderBattleLog } from '@crux/engine';
+import type { MatchEvent, MatchState } from '@crux/engine';
+import { alive } from '@crux/cli/jobs';
+import type { MatchMeta } from '@crux/cli/jobs';
 import { runLocalMatch } from '@crux/cli/match';
+import { autoLens, availableFighters, realBrains, resetProbe } from '@crux/cli/real';
+import { loadUserMascots } from '@crux/cli/mascots';
+import type { MascotData } from '@crux/cli/mascots';
+import { loadCustomConfig } from '@crux/channels';
+import { FIGHT_DEFAULTS, customConfigFile, desktopLockFile } from '@crux/cli/settings';
+import type { FightDefaults } from '@crux/cli/settings';
 import { crabPng } from './icon.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -19,24 +29,23 @@ const REPLAY_DIR = argValue('--replay');
 const SPEED = Number(argValue('--speed')) || undefined;
 const EXIT_AFTER_REPLAY = process.argv.includes('--exit-after-replay');
 const BACKDROP = process.argv.includes('--backdrop');   // 录视频时铺深色背景，不录到桌面上的其他窗口
+const BACKGROUND = process.argv.includes('--background'); // 被 crux fight 拉起：只开托盘，不弹输入框
 const FALLBACK_HOTKEYS = ['CommandOrControl+Alt+Space', 'CommandOrControl+Shift+Space', 'Alt+Shift+A'];
 const BAND_HEIGHT = 500;
 const REPO_URL = 'https://github.com/Jason-Zhang-xiquan/crux-arena';
 
-interface Settings {
-  team: string[];
-  mode: 'ffa' | 'team';
+// 选手、模式、真实模型 / 演示、推理档位、回合、预算、agent 对局显示方式、存档位置和 CLI 共用（见 @crux/cli/settings）
+interface Settings extends FightDefaults {
   dir: string;
   question: string;
   hotkey: string;                    // 空字符串 = 自动（按备选列表找一个没被占用的）
   speed: 1 | 2 | 4;
   logPanel: 'auto' | 'open' | 'closed';
   autoLaunch: boolean;
-  matchesDir: string;                // 空字符串 = 默认位置
 }
 const DEFAULTS: Settings = {
-  team: ['claude', 'codex', 'gemini', 'deepseek'], mode: 'ffa', dir: '', question: '',
-  hotkey: '', speed: 1, logPanel: 'auto', autoLaunch: false, matchesDir: '',
+  ...FIGHT_DEFAULTS, dir: '', question: '',
+  hotkey: '', speed: 1, logPanel: 'auto', autoLaunch: false,
 };
 
 let settings: Settings = { ...DEFAULTS };
@@ -110,7 +119,7 @@ function showSettings() {
   launcher?.hide();
   if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.show(); settingsWin.focus(); return; }
   settingsWin = new BrowserWindow({
-    width: 640, height: 640, frame: false, transparent: true, resizable: false, alwaysOnTop: true,
+    width: 640, height: 780, frame: false, transparent: true, resizable: false, alwaysOnTop: true,
     skipTaskbar: false, title: 'Crux Arena 设置', backgroundColor: '#00000000', webPreferences,
   });
   secure(settingsWin);
@@ -155,12 +164,38 @@ function pipe(w: BrowserWindow) {
   };
 }
 
+/* ---------- 自定义形象与选手 ---------- */
+// 用户画的形象（数据目录/mascots/*.json）和 channels.json 里新加的 AI；页面加载时通过预加载脚本同步拿到
+let custom: { mascots: MascotData[]; fighters: Array<{ id: string; name: string; color?: string; maker?: string }>; errors: string[] } = { mascots: [], fighters: [], errors: [] };
+async function loadCustom() {
+  const { mascots, errors } = await loadUserMascots();
+  let fighters: typeof custom.fighters = [];
+  try {
+    const cfg = await loadCustomConfig(customConfigFile());
+    fighters = Object.entries(cfg.fighters).map(([id, f]) => ({ id, name: f.name ?? id.toUpperCase(), ...(f.color ? { color: f.color } : {}), ...(f.maker ? { maker: f.maker } : {}) }));
+  } catch (err) { errors.push((err as Error).message); }
+  custom = { mascots, fighters, errors };
+}
+const knownFighters = () => new Set<string>([...FIGHTER_IDS, ...custom.fighters.map(f => f.id), ...custom.mascots.map(m => m.id)]);
+
+/** 改了形象或 channels.json 之后：重新读取、重新探测通道、重建输入框 */
+async function reloadCustom() {
+  await loadCustom();
+  resetProbe();
+  launcher?.destroy(); launcher = undefined;
+  createLauncher();
+  const n = custom.mascots.length, f = custom.fighters.length;
+  const problems = custom.errors.length ? `\n\n有问题的文件：\n${custom.errors.join('\n')}` : '';
+  dialog.showMessageBox({ message: `已重新加载：${n} 个自定义形象，${f} 个自定义选手${problems}` });
+}
+
 /* ---------- 开打 / 回放 ---------- */
 interface FightPayload { question: unknown; team: unknown; mode: unknown; dir: unknown }
 
 async function startFight(p: FightPayload): Promise<{ ok: true } | { ok: false; error: string }> {
   const question = typeof p.question === 'string' ? p.question.trim().slice(0, 2000) : '';
-  const team = Array.isArray(p.team) ? [...new Set(p.team.filter((x): x is string => typeof x === 'string' && (FIGHTER_IDS as readonly string[]).includes(x)))] : [];
+  const known = knownFighters();
+  const team = Array.isArray(p.team) ? [...new Set(p.team.filter((x): x is string => typeof x === 'string' && known.has(x)))] : [];
   const mode = p.mode === 'team' ? 'team' : 'ffa';
   const dir = typeof p.dir === 'string' ? p.dir.trim() : '';
   if (!question) return { ok: false, error: '先写一个问题' };
@@ -169,10 +204,21 @@ async function startFight(p: FightPayload): Promise<{ ok: true } | { ok: false; 
     try { if (!(await stat(dir)).isDirectory()) return { ok: false, error: '文件夹路径不是文件夹' }; }
     catch { return { ok: false, error: '找不到这个文件夹' }; }
   }
+  const real = settings.brains === 'real';
+  if (real) {
+    const avail = await availableFighters(settings.effort);
+    const missing = team.filter(id => !avail[id]);
+    if (missing.length) return { ok: false, error: `${missing.map(x => x.toUpperCase()).join('、')} 在本机没有通道（设置里可以换成演示大脑）` };
+  }
   await saveSettings({ team, mode, dir, question });
   launcher?.hide();
   const out = pipe(createArena());
-  runLocalMatch({ question, team, mode, dir: dir || undefined, outDir: matchesDir(), onEvent: out.event })
+  runLocalMatch({
+    question, team, mode, dir: dir || undefined, outDir: matchesDir(), onEvent: out.event,
+    maxRounds: settings.rounds, budget: settings.budget,
+    meta: { source: 'desktop', display: 'full', pid: process.pid, question, team, startedAt: new Date().toISOString() },
+    ...(real ? { brains: realBrains({ effort: settings.effort, lenses: autoLens(question, dir || undefined) }) } : {}),
+  })
     .then(r => { lastMatchDir = r.matchDir; out.done({ battleLog: r.battleLog, matchDir: r.matchDir }); })
     .catch(err => { console.error(err); out.done({ error: String(err?.message ?? err) }); });
   return { ok: true };
@@ -191,6 +237,107 @@ async function replay(matchDir: string): Promise<{ ok: boolean; error?: string }
   try { battleLog = renderBattleLog(events); } catch { /* 比赛没打完时生成不了完整战报 */ }
   out.done({ battleLog, matchDir });
   return { ok: true };
+}
+
+/* ---------- 接管 agent 拉起的对局 ---------- */
+// crux fight 在后台跑比赛、往存档里追加 events.jsonl；这里轮询存档目录，发现新对局就跟着读，按 meta.display 显示。
+interface External { id: string; dir: string; meta: MatchMeta; events: MatchEvent[]; state: MatchState; ended: boolean; error?: string; subs: Set<(e: MatchEvent | null) => void> }
+const seen = new Set<string>();
+let miniWin: BrowserWindow | undefined;
+let miniMatch: External | undefined;
+
+async function scanExternal() {
+  let names: string[];
+  try { names = (await readdir(matchesDir(), { withFileTypes: true })).filter(d => d.isDirectory()).map(d => d.name).sort().slice(-20); } catch { return; }
+  for (const id of names) {
+    if (seen.has(id)) continue;
+    const dir = path.join(matchesDir(), id);
+    let meta: MatchMeta;
+    try { meta = JSON.parse(await readFile(path.join(dir, 'meta.json'), 'utf8')); } catch { continue; }   // 没有 meta：旧存档，或刚建好文件夹
+    seen.add(id);
+    if (meta.source !== 'cli' || meta.display === 'none' || !alive(meta.pid)) continue;
+    follow({ id, dir, meta, events: [], state: initialState(), ended: false, subs: new Set() });
+  }
+}
+
+/** 跟读 events.jsonl：只解析写完整的行；跑比赛的进程没了就停 */
+function follow(x: External) {
+  let offset = 0, buf = '', idle = 0;
+  const file = path.join(x.dir, 'events.jsonl');
+  const timer = setInterval(async () => {
+    try {
+      const fh = await open(file, 'r');
+      const { size } = await fh.stat();
+      if (size > offset) {
+        const b = Buffer.alloc(size - offset);
+        await fh.read(b, 0, b.length, offset);
+        offset = size; buf += b.toString('utf8'); idle = 0;
+      } else idle++;
+      await fh.close();
+    } catch { idle++; }
+    const cut = buf.lastIndexOf('\n');
+    if (cut >= 0) {
+      for (const e of parseEventLines(buf.slice(0, cut + 1))) {
+        x.events.push(e); apply(x.state, e);
+        x.subs.forEach(f => f(e));
+        if (e.type === 'match_ended') x.ended = true;
+      }
+      buf = buf.slice(cut + 1);
+    }
+    if (!x.ended && idle > 10 && !alive(x.meta.pid)) x.error = '跑比赛的进程已退出，对局中断';
+    if (x.ended || x.error) { clearInterval(timer); x.subs.forEach(f => f(null)); }
+    if (miniMatch === x) updateMini();
+  }, 400);
+  if (x.meta.display === 'mini') showMini(x);
+  else showExternalArena(x);
+}
+
+/** 完整竞技场：先补播已经发生的事件，再接着实时播 */
+function showExternalArena(x: External) {
+  launcher?.hide();
+  lastMatchDir = x.dir;
+  const out = pipe(createArena());
+  x.events.forEach(out.event);
+  const finish = () => {
+    let battleLog = '';
+    try { battleLog = renderBattleLog(x.events); } catch { /* 没打完 */ }
+    out.done(x.error ? { error: x.error } : { battleLog, matchDir: x.dir });
+  };
+  if (x.ended || x.error) return finish();
+  const sub = (e: MatchEvent | null) => { if (e) out.event(e); else { x.subs.delete(sub); finish(); } };
+  x.subs.add(sub);
+}
+
+function showMini(x: External) {
+  miniMatch = x;
+  if (!miniWin || miniWin.isDestroyed()) {
+    const d = cursorDisplay();
+    miniWin = new BrowserWindow({
+      x: d.x + d.width - 376, y: d.y + d.height - 140, width: 372, height: 132,
+      frame: false, transparent: true, resizable: false, alwaysOnTop: true, skipTaskbar: true, focusable: false,
+      show: false, backgroundColor: '#00000000', webPreferences,
+    });
+    miniWin.setAlwaysOnTop(true, 'floating');
+    secure(miniWin);
+    miniWin.loadFile(page('mini.html'));
+    miniWin.once('ready-to-show', () => { miniWin?.showInactive(); updateMini(); });
+    miniWin.on('closed', () => { miniWin = undefined; });
+  } else { miniWin.showInactive(); updateMini(); }
+}
+
+function updateMini() {
+  const x = miniMatch;
+  if (!x || !miniWin || miniWin.isDestroyed()) return;
+  const s = x.state;
+  const last = [...x.events].reverse().find(e => e.type === 'action' || e.type === 'claim' || e.type === 'crux');
+  const name = (id: string) => s.start?.fighters.find(f => f.id === id)?.name ?? id;
+  const KIND = { attack: '攻', defend: '守', concede: '让', shift: '改' } as const;
+  const text = !last ? '' : last.type === 'action' ? `${name(last.actor)} ${KIND[last.kind]} ${last.target}：${last.why}` : last.type === 'claim' ? `${name(last.actor)} 立 ${last.id}：${last.short}` : last.type === 'crux' ? `裁判：分歧 ${last.clash.join('/')}` : '';
+  const out = new Set(Object.values(s.claims).filter(c => c.status === 'ko').map(c => c.owner).filter(o => !Object.values(s.claims).some(c => c.status === 'alive' && c.supporters.includes(o))));
+  miniWin.webContents.send('mini:update', {
+    question: x.meta.question, round: s.round, tokens: s.tokens, budget: s.start?.budget ?? 0, last: text, done: x.ended, error: x.error,
+    fighters: (s.start?.fighters ?? x.meta.team.map(id => ({ id, name: id.toUpperCase() }))).map(f => ({ id: f.id, name: f.name, out: out.has(f.id) })),
+  });
 }
 
 interface MatchSummary { id: string; dir: string; question: string; mode: string; fighters: string[]; finished: boolean; when: string }
@@ -234,6 +381,11 @@ function registerIpc() {
     if (patch.logPanel === 'auto' || patch.logPanel === 'open' || patch.logPanel === 'closed') clean.logPanel = patch.logPanel;
     if (typeof patch.autoLaunch === 'boolean') clean.autoLaunch = patch.autoLaunch;
     if (typeof patch.matchesDir === 'string') clean.matchesDir = patch.matchesDir;
+    if (patch.brains === 'real' || patch.brains === 'demo') clean.brains = patch.brains;
+    if (patch.effort && ['off', 'low', 'medium', 'high', 'max'].includes(patch.effort)) clean.effort = patch.effort;
+    if (Number.isInteger(patch.rounds) && patch.rounds! >= 1 && patch.rounds! <= 5) clean.rounds = patch.rounds;
+    if (Number.isInteger(patch.budget) && patch.budget! >= 20_000 && patch.budget! <= 5_000_000) clean.budget = patch.budget;
+    if (patch.agentDisplay === 'full' || patch.agentDisplay === 'mini' || patch.agentDisplay === 'none') clean.agentDisplay = patch.agentDisplay;
     await saveSettings(clean);
     if ('autoLaunch' in clean) app.setLoginItemSettings({ openAtLogin: settings.autoLaunch });
     const hk = 'hotkey' in clean ? registerHotkey() : { ok: true };
@@ -266,6 +418,16 @@ function registerIpc() {
   ipcMain.on('arena:close', () => arena?.close());
   ipcMain.on('arena:open-match', () => { if (lastMatchDir) shell.openPath(lastMatchDir); });
   ipcMain.on('clipboard', (_e, text: string) => clipboard.writeText(String(text)));
+  // 真实模型模式下每名选手实际会用的模型；没有通道的不在里面（只读探测，不耗额度）
+  ipcMain.handle('channels:status', async () => (settings.brains === 'real' ? { real: true, models: await availableFighters(settings.effort) } : { real: false, models: {} }));
+  ipcMain.on('mini:expand', () => {
+    const x = miniMatch;
+    if (!x) return;
+    miniWin?.hide();
+    if (x.ended) replay(x.dir); else showExternalArena(x);
+  });
+  ipcMain.on('mini:close', () => miniWin?.hide());
+  ipcMain.on('custom:get', e => { e.returnValue = { mascots: custom.mascots, fighters: custom.fighters }; });
 }
 
 /* ---------- 托盘 ---------- */
@@ -278,6 +440,7 @@ function refreshTray() {
     { label: '打开存档回放…', click: pickReplay },
     { type: 'separator' },
     { label: '设置…', click: showSettings },
+    { label: '重新加载自定义形象与通道', click: reloadCustom },
     { label: '打开存档文件夹', click: async () => { await mkdir(matchesDir(), { recursive: true }); shell.openPath(matchesDir()); } },
     { type: 'separator' },
     { label: '退出 Crux Arena', click: () => app.quit() },
@@ -362,19 +525,32 @@ async function replayFromArgs(dir: string) {
 /* ---------- 启动 ---------- */
 app.setName('Crux Arena');
 if (SELFTEST) app.setPath('userData', path.join(app.getPath('temp'), 'crux-selftest-userdata'));
+process.env.CRUX_HOME = app.getPath('userData');   // CLI 那套工具（通道配置、形象目录、锁文件）和桌面版用同一个数据目录
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', showLauncher);
+  app.on('second-instance', (_e, argv) => { if (!argv.includes('--background')) showLauncher(); });
   app.on('window-all-closed', () => { /* 托盘常驻，窗口关了也不退出 */ });
-  app.on('will-quit', () => globalShortcut.unregisterAll());
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    if (!SELFTEST && !REPLAY_DIR) try { unlinkSync(desktopLockFile()); } catch { /* 已经没了 */ }
+  });
   app.whenReady().then(async () => {
     await loadSettings();
+    if (SELFTEST) settings.brains = 'demo';            // 自测不花额度
+    await loadCustom();
     registerIpc();
     createTray();
     registerHotkey();
     createLauncher();
+    if (!SELFTEST && !REPLAY_DIR) {
+      // 告诉 crux fight 桌面版在跑；然后开始接管 agent 拉起的对局
+      await mkdir(app.getPath('userData'), { recursive: true });
+      await writeFile(desktopLockFile(), JSON.stringify({ pid: process.pid }));
+      setInterval(scanExternal, 1500);
+      scanExternal();
+    }
     if (SELFTEST) await selftest();
     else if (REPLAY_DIR) await replayFromArgs(REPLAY_DIR);
-    else showLauncher();
+    else if (!BACKGROUND) showLauncher();
   });
 }

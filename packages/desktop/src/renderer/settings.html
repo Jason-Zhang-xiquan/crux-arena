@@ -44,6 +44,21 @@
   </section>
 
   <section>
+    <h2>MODELS · 模型与额度</h2>
+    <div class="row" style="margin-bottom:8px"><span class="hint" style="width:90px">大脑</span><div class="seg" id="brains"><button class="btn" data-v="real">真实模型</button><button class="btn" data-v="demo">演示</button></div></div>
+    <div class="row" style="margin-bottom:8px"><span class="hint" style="width:90px">推理档位</span><div class="seg" id="effort"><button class="btn" data-v="low">低</button><button class="btn" data-v="medium">中</button><button class="btn" data-v="high">高</button></div></div>
+    <div class="row" style="margin-bottom:8px"><span class="hint" style="width:90px">最多回合</span><div class="seg" id="rounds"><button class="btn" data-v="1">1</button><button class="btn" data-v="2">2</button><button class="btn" data-v="3">3</button></div></div>
+    <div class="row"><span class="hint" style="width:90px">单场预算</span><div class="seg" id="budget"><button class="btn" data-v="120000">120k</button><button class="btn" data-v="250000">250k</button><button class="btn" data-v="400000">400k</button></div></div>
+    <div class="msg hint" id="chanMsg">真实模型走本机已登录的 Cursor Agent / Claude Code，会消耗你的会员额度。</div>
+  </section>
+
+  <section>
+    <h2>AGENT · 从 agent 拉起的对局</h2>
+    <div class="row"><span class="hint" style="width:90px">显示方式</span><div class="seg" id="agentDisplay"><button class="btn" data-v="full">完整竞技场</button><button class="btn" data-v="mini">角落小窗</button><button class="btn" data-v="none">纯后台</button></div></div>
+    <div class="msg hint">在 Claude Code、Cursor、Codex 等 agent 里说"跟 codex、gemini 讨论一下…"，会用这里的默认值开打（crux fight）。</div>
+  </section>
+
+  <section>
     <h2>PLAYBACK · 播放</h2>
     <div class="row" style="margin-bottom:8px"><span class="hint" style="width:90px">默认倍速</span><div class="seg" id="speed"><button class="btn" data-v="1">1X</button><button class="btn" data-v="2">2X</button><button class="btn" data-v="4">4X</button></div></div>
     <div class="row"><span class="hint" style="width:90px">战报面板</span><div class="seg" id="logPanel"><button class="btn" data-v="auto">自动</button><button class="btn" data-v="open">展开</button><button class="btn" data-v="closed">收起</button></div></div>
@@ -61,7 +76,7 @@
   </section>
 
   <div class="about">
-    <b>Crux Arena</b> <span id="ver"></span> · 当前是<b>演示大脑</b>，还没接入真实模型。<br>
+    <b>Crux Arena</b> <span id="ver"></span> · 选手的实际模型和档位写进每场存档的 calls.jsonl。<br>
     文件夹模式只读：只能列目录、读文件、搜索，不会写入任何东西。<br>
     <a href="#" id="repo" style="color:var(--blue)">GitHub 仓库</a>
   </div>

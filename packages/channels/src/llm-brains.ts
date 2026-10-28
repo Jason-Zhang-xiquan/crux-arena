@@ -2,9 +2,9 @@
 // 每次调用（含失败和重试）都交给 onCall 记录：提示词、原始输出、模型、档位映射、用量、耗时。
 import { z } from 'zod';
 import { aliases, renderBoard } from '@crux/engine';
-import type { ActOut, BoardAction, BoardView, Brains, CruxOut, DraftOut, Evidence, FighterSpec, FinalOut, MatchState, RulingOut, Tokens } from '@crux/engine';
+import type { ActOut, BoardView, Brains, CruxOut, DraftOut, Evidence, FighterSpec, FinalOut, MatchState, RuleInput, RulingOut, Tokens } from '@crux/engine';
 import type { Channel, ChannelResult, Effort, ErrorKind, Task } from './channel.ts';
-import { SYSTEM_CHAIR, SYSTEM_FIGHTER, SYSTEM_JUDGE, actPrompt, cruxPrompt, draftPrompt, finalPrompt, rulePrompt } from './prompts.ts';
+import { SYSTEM_CHAIR, SYSTEM_FIGHTER, SYSTEM_JUDGE, actPrompt, cruxPrompt, draftPrompt, finalPrompt, roundRulePrompt, rulePrompt } from './prompts.ts';
 
 export interface Seat { channel: Channel; model: string; effort: Effort }
 
@@ -36,6 +36,10 @@ export interface LlmBrainsOptions {
   onCall?: (c: CallRecord) => void;
   /** 交锋阶段要不要再给选手背景材料（省 token 时关掉） */
   contextInAct?: boolean;
+  /** 立场视角：按出场顺序轮流分配；不传就不分 */
+  lenses?: readonly string[];
+  /** 选手盲答前可以请求读文件（只读工具，带审计）；返回带行号的原文或错误说明 */
+  read?: (actor: string, ref: string) => Promise<string>;
 }
 
 /* ---------- 输出解析：宽松接收，再交给引擎的合规检查兜底 ---------- */
@@ -45,7 +49,11 @@ const label = z.string().transform(s => LABELS[s.trim().toLowerCase()] ?? 'infer
 const str = z.string().catch('');
 const ids = z.array(z.string()).catch([]);
 
-const DraftJson = z.object({ answer: str, claim: z.object({ text: z.string().min(1), short: z.string().min(1), label: label.catch('inference') }) });
+const DraftJson = z.object({
+  need: z.array(z.string()).nullish(),
+  answer: str.optional(),
+  claim: z.object({ text: z.string().min(1), short: z.string().min(1), label: label.catch('inference') }).nullish(),
+}).refine(v => v.claim || v.need?.length, '需要 claim（或者先用 need 请求文件）');
 const ActJson = z.object({
   actions: z.array(z.object({
     kind: z.enum(['attack', 'defend', 'concede', 'shift']),
@@ -64,14 +72,30 @@ const CruxJson = z.object({
   stances: z.record(z.string(), z.string()).catch({}),
 });
 const RuleJson = z.object({ verdict: z.enum(['upheld', 'partial', 'rejected']), text: str, evidenceRelevant: z.boolean().catch(true) });
+const RoundRuleJson = z.object({ rulings: z.array(RuleJson.extend({ id: z.string() })) });
 const FinalJson = z.object({ answer: z.string().min(1), minority: ids, userCruxes: ids, confidence: z.number().min(0).max(1).catch(0.6) });
 
 /** 从模型输出里取出 JSON 对象：容忍代码块包裹和前后多余文字 */
 export function extractJson(text: string): unknown {
   const t = text.replace(/```(?:json)?/gi, '');
+  // 先试最外层的 { … }；不行再从每个 { 起按括号配对（跳过字符串里的括号）找第一个能解析的对象
   const a = t.indexOf('{'), b = t.lastIndexOf('}');
   if (a < 0 || b <= a) throw new Error('输出里没有 JSON 对象');
-  return JSON.parse(t.slice(a, b + 1));
+  let first: unknown;
+  try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { first = e; }
+  for (let start = a; start >= 0; start = t.indexOf('{', start + 1)) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < t.length; i++) {
+      const ch = t[i];
+      if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) {
+        try { return JSON.parse(t.slice(start, i + 1)); } catch { break; }
+      }
+    }
+  }
+  throw first;
 }
 
 const ZERO: Tokens = { in: 0, out: 0 };
@@ -80,6 +104,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 export class LlmBrains implements Brains {
   private n = 0;
   private answers = new Map<string, string>();   // 选手编号 → 盲答全文（主席综合时用，匿名化后给出）
+  private extra = new Map<string, string>();     // 选手编号 → 他自己请求读过的原文（交锋时继续给他）
   private o: LlmBrainsOptions;
   constructor(o: LlmBrainsOptions) { this.o = { ...o }; }
 
@@ -124,10 +149,21 @@ export class LlmBrains implements Brains {
   }
 
   async draft(f: FighterSpec, question: string): Promise<DraftOut> {
-    const { value, tokens } = await this.ask(f.id, this.seat(f.id), 'draft', SYSTEM_FIGHTER, draftPrompt(question, this.o.context), DraftJson);
-    if (!value) return { answer: '', claims: [], tokens };
-    this.answers.set(f.id, value.answer);
-    return { answer: value.answer, claims: [value.claim], tokens };
+    const order = this.o.state().start?.fighters.findIndex(x => x.id === f.id) ?? 0;
+    const lens = this.o.lenses?.length ? this.o.lenses[Math.max(0, order) % this.o.lenses.length] : undefined;
+    const base = { question, context: this.o.context, lens };
+    let { value, tokens } = await this.ask(f.id, this.seat(f.id), 'draft', SYSTEM_FIGHTER, draftPrompt({ ...base, canRead: !!this.o.read }), DraftJson);
+    // 先请求读文件：引擎用只读工具读出原文（带审计、屏蔽敏感文件），再让他作答一次
+    if (value && !value.claim && value.need?.length && this.o.read) {
+      const got = await Promise.all(value.need.slice(0, 3).map(ref => this.o.read!(f.id, ref)));
+      this.extra.set(f.id, got.join('\n\n'));
+      const again = await this.ask(f.id, this.seat(f.id), 'draft', SYSTEM_FIGHTER, draftPrompt({ ...base, extra: this.extra.get(f.id) }), DraftJson);
+      tokens = { in: tokens.in + again.tokens.in, out: tokens.out + again.tokens.out };
+      value = again.value;
+    }
+    if (!value?.claim) return { answer: '', claims: [], tokens };
+    this.answers.set(f.id, value.answer ?? '');
+    return { answer: value.answer ?? '', claims: [value.claim], tokens };
   }
 
   async act(f: FighterSpec, view: BoardView, feedback?: string[]): Promise<ActOut> {
@@ -135,7 +171,7 @@ export class LlmBrains implements Brains {
     const alias = aliases(s);
     const me = s.start?.fighters.find(x => x.id === f.id);
     const teammates = me?.team ? s.start!.fighters.filter(x => x.team === me.team && x.id !== f.id).map(x => alias.get(x.id) ?? x.id) : undefined;
-    const prompt = actPrompt({ board: renderBoard(view), context: this.o.contextInAct ? this.o.context : undefined, ownAnswer: this.answers.get(f.id), teammates, feedback });
+    const prompt = actPrompt({ board: renderBoard(view), context: this.o.contextInAct ? this.o.context : undefined, extra: this.extra.get(f.id), ownAnswer: this.answers.get(f.id), teammates, feedback });
     const { value, tokens } = await this.ask(f.id, this.seat(f.id), 'act', SYSTEM_FIGHTER, prompt, ActJson);
     const actions = (value?.actions ?? []).map(a => ({
       kind: a.kind, target: a.target, why: a.why,
@@ -163,19 +199,42 @@ export class LlmBrains implements Brains {
     return { clash: value.clash, consensus: value.consensus, merges: value.merges, stances: value.stances, why: value.why, tokens };
   }
 
-  async rule(a: BoardAction & { steelman?: string; detail: string; evidence: Evidence[] }, view: BoardView): Promise<RulingOut> {
+  /** 把一步动作写成给裁判看的文字，并由引擎核对证据原文 */
+  private async describe(a: RuleInput) {
     const s = this.o.state();
     const alias = aliases(s);
     const c = s.claims[a.target];
     const checks = await Promise.all(a.evidence.map(async e => (this.o.verify ? this.o.verify(e) : { ok: false, note: `${e.ref}：无法核对` })));
     const kind = { attack: '攻击', defend: '辩护', concede: '放弃', shift: '改投' }[a.kind];
-    const action = `${a.id} ${a.actor} ${kind} ${a.target}。理由：${a.why}${a.steelman ? `。对方最强理由：${a.steelman}` : ''}${a.detail ? `。展开：${a.detail}` : ''}`;
-    const target = c ? `${c.id}（${alias.get(c.owner)}）${c.text}` : a.target;
-    const evidence = checks.length ? checks.map(x => `${x.ok ? '✓' : '✗'} ${x.note}`).join('；') : '无证据';
-    const { value, tokens } = await this.ask('judge', this.o.judge, 'rule', SYSTEM_JUDGE, rulePrompt({ question: view.question, target, action, evidence }), RuleJson);
-    const verified = checks.length > 0 && checks.every(x => x.ok);
+    return {
+      action: `${a.id} ${a.actor} ${kind} ${a.target}。理由：${a.why}${a.steelman ? `。对方最强理由：${a.steelman}` : ''}${a.detail ? `。展开：${a.detail}` : ''}`,
+      target: c ? `${c.id}（${alias.get(c.owner)}）${c.text}` : a.target,
+      evidence: checks.length ? checks.map(x => `${x.ok ? '✓' : '✗'} ${x.note}`).join('；') : '无证据',
+      verified: checks.length > 0 && checks.every(x => x.ok),
+    };
+  }
+
+  async rule(a: RuleInput, view: BoardView): Promise<RulingOut> {
+    const d = await this.describe(a);
+    const { value, tokens } = await this.ask('judge', this.o.judge, 'rule', SYSTEM_JUDGE, rulePrompt({ question: view.question, target: d.target, action: d.action, evidence: d.evidence }), RuleJson);
     if (!value) return { verdict: 'partial', text: '裁判缺席，按部分成立', evidenceOk: false, tokens };
-    return { verdict: value.verdict, text: value.text, evidenceOk: verified && value.evidenceRelevant, tokens };
+    return { verdict: value.verdict, text: value.text, evidenceOk: d.verified && value.evidenceRelevant, tokens };
+  }
+
+  /** 一回合一次裁决：省掉大部分裁判调用，裁判也能把同一张卡上的攻和守放在一起看 */
+  async ruleRound(actions: RuleInput[], view: BoardView) {
+    const ds = await Promise.all(actions.map(a => this.describe(a)));
+    const items = ds.map(d => `- ${d.action}
+  针对：${d.target}
+  证据核对：${d.evidence}`);
+    const { value, tokens } = await this.ask('judge', this.o.judge, 'rule', SYSTEM_JUDGE, roundRulePrompt({ question: view.question, items }), RoundRuleJson);
+    const byId = new Map((value?.rulings ?? []).map(r => [r.id, r]));
+    const rulings = actions.map((a, i) => {
+      const r = byId.get(a.id);
+      if (!r) return { verdict: 'partial' as const, text: '裁判漏判，按部分成立', evidenceOk: false };
+      return { verdict: r.verdict, text: r.text, evidenceOk: ds[i].verified && r.evidenceRelevant };
+    });
+    return { rulings, tokens };
   }
 
   async final(view: BoardView): Promise<FinalOut> {

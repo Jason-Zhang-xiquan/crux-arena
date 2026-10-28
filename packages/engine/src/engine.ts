@@ -1,7 +1,7 @@
 // 比赛状态机：ROUND 0 盲答 → 分歧提取 → 交锋（≤ maxRounds）→ 收敛 → 冠军答案。
 // 引擎只产出事件；状态全部由 state.ts 从事件推导。
 import { randomUUID } from 'node:crypto';
-import type { ActionDraft, Brains } from './brains.ts';
+import type { ActionDraft, Brains, RuleInput } from './brains.ts';
 import type { EventInput, FighterSpec, MatchEvent, Tokens } from './schema.ts';
 import { MatchEvent as MatchEventSchema, sumTokens } from './schema.ts';
 import { RULING_LIMIT, WHY_LIMIT, clampText, score } from './rules.ts';
@@ -36,19 +36,20 @@ export function createRecorder(opts: { now?: () => number; sink?: Sink } = {}) {
   const now = opts.now ?? Date.now;
   let t0: number | undefined;
   let chain: Promise<void> = Promise.resolve();
+  let sinkError: unknown;              // 写入失败不能让后面的事件静默丢失：记下第一个错误，后面照写，flush 时抛出
   const emit = (input: EventInput): MatchEvent => {
     t0 ??= now();
     const e = MatchEventSchema.parse({ ...input, seq: events.length, t: Math.max(0, now() - t0) });
     events.push(e);
     apply(state, e);
-    if (opts.sink) { const sink = opts.sink; chain = chain.then(() => sink(e)); }
+    if (opts.sink) { const sink = opts.sink; chain = chain.then(() => sink(e)).catch(err => { sinkError ??= err; }); }
     return e;
   };
   return {
     events, state, emit,
     /** 文件夹工具的审计回调：每次只读调用变成一条 tool_call 事件 */
     tool: (a: ToolAudit) => { emit({ type: 'tool_call', ...a }); },
-    flush: () => chain,
+    flush: async () => { await chain; if (sinkError) throw sinkError; },
   };
 }
 export type Recorder = ReturnType<typeof createRecorder>;
@@ -85,6 +86,22 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
     });
   });
 
+  // 交出盲答的不到 2 人：没有可交锋的分歧，对局无效。不调用裁判，不能当成"没有分歧"的完美收敛
+  const answered = drafts.filter(d => d.claims.length).length;
+  if (answered < 2) {
+    emit({ type: 'flag', kind: 'invalid_action', note: `只有 ${answered} 名选手交出盲答，对局无效` });
+    emit({ type: 'converged', round: 0, reason: 'forfeit', savedTokens: 0 });
+    if (answered === 0) {
+      emit({ type: 'final', answer: '对局无效：所有选手的盲答都失败了，没有答案可以综合。失败原因见存档里的 calls.jsonl。', minority: [], userCruxes: [], confidence: 0, tokens: ZERO });
+    } else {
+      const fin = await brains.final(boardView(s));
+      emit({ type: 'final', answer: fin.answer, minority: fin.minority, userCruxes: ['只有一名选手作答，没有经过交锋，请自行核实', ...fin.userCruxes], confidence: Math.min(fin.confidence, 0.3), tokens: fin.tokens });
+    }
+    emit({ type: 'match_ended', totalTokens: s.tokens, savedTokens: s.saved, costUsd: cfg.price ? Number(cfg.price(s.tokens).toFixed(4)) : 0 });
+    await rec.flush();
+    return rec;
+  }
+
   // 分歧提取：裁判只看匿名论点板
   const unalias = new Map([...aliases(s)].map(([id, a]) => [a, id]));
   const cx = await brains.crux(boardView(s));
@@ -102,7 +119,9 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
     if (who && c?.status === 'alive' && !c.supporters.includes(who)) emit({ type: 'second', actor: who, target: claim, why: `立场归入 ${claim}` });
   }
 
-  let lastRoundTokens = fighters.length * ROUND_COST_PER_FIGHTER;
+  // 第 1 回合的花费估算：每人一次出手 ≈ 盲答花费的中位数，加一次裁决 ≈ 分歧提取的花费（没有实测数据时用固定值）
+  const perFighter = drafts.map(d => sumTokens(d.tokens)).sort((a, b) => a - b)[Math.floor(drafts.length / 2)] ?? 0;
+  let lastRoundTokens = Math.max(fighters.length * ROUND_COST_PER_FIGHTER, perFighter * fighters.length + sumTokens(cx.tokens));
   if (aliveClash(s).length <= 1) {
     emit({ type: 'converged', round: 0, reason: 'flawless', savedTokens: maxRounds * lastRoundTokens });
   } else {
@@ -113,6 +132,8 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
       emit({ type: 'round_started', round });
       const before = s.tokens;
       let progressed = false;
+      const pending: RuleInput[] = [];        // 批量裁决：回合末尾一起判
+      const judged = (kind: string, verdict: string) => { if (kind === 'attack' && verdict !== 'rejected') progressed = true; };
 
       // 稀疏化：第 2 回合起，和已出场选手立场完全相同的人轮空
       const active: FighterSpec[] = [];
@@ -129,7 +150,7 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
       }
 
       for (const f of active) {
-        if (s.tokens >= budget * (1 - FINAL_RESERVE)) break;   // 回合中途也守住冠军答案的预留
+        if (s.tokens >= budget) break;   // 硬上限；开打前已估算过整回合，回合中途不截断，超出部分由冠军答案的预留兜底
         let out = await brains.act(f, boardView(s, f.id));
         let spent = out.tokens;
         const problems = (list: ActionDraft[]) => {
@@ -166,15 +187,25 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
           if (why.truncated) emit({ type: 'flag', kind: 'why_truncated', actor: f.id, action: id, note: `理由超过 ${WHY_LIMIT} 字，已截断` });
           if (check.causeOnly) emit({ type: 'flag', kind: 'no_cause', actor: f.id, action: id, note: '无因认输：没有写明被哪一步说服（可能是从众）' });
           if (action.type === 'action' && (draft.kind === 'attack' || draft.kind === 'defend')) {
-            const view = boardView(s);
-            const alias = aliases(s);
-            const r = await brains.rule({ id, round, actor: alias.get(f.id) ?? f.id, kind: draft.kind, target: draft.target, why: why.text, steelman: draft.steelman, detail: action.detail, evidence: action.evidence }, view);
+            const input: RuleInput = { id, round, actor: aliases(s).get(f.id) ?? f.id, kind: draft.kind, target: draft.target, why: why.text, steelman: draft.steelman, detail: action.detail, evidence: action.evidence };
+            if (brains.ruleRound) { pending.push(input); continue; }
+            const r = await brains.rule(input, boardView(s));
             const pts = score(draft.kind, r.verdict, action.evidence.length > 0, r.evidenceOk);
             emit({ type: 'ruling', action: id, verdict: r.verdict, text: clampText(r.text, RULING_LIMIT).text, evidenceOk: r.evidenceOk, ...pts, tokens: r.tokens });
-            if (draft.kind === 'attack' && r.verdict !== 'rejected') progressed = true;
+            judged(draft.kind, r.verdict);
           } else progressed = true;
         }
         if (!billed && sumTokens(spent) > 0) emit({ type: 'skip', round, actor: f.id, reason: '本回合观望，没有行动', savedTokens: 0, tokens: bill() });
+      }
+
+      if (pending.length && brains.ruleRound) {
+        const { rulings, tokens } = await brains.ruleRound(pending, boardView(s));
+        pending.forEach((a, i) => {
+          const r = rulings[i] ?? { verdict: 'partial' as const, text: '裁判漏判，按部分成立', evidenceOk: false };
+          const pts = score(a.kind, r.verdict, a.evidence.length > 0, r.evidenceOk);
+          emit({ type: 'ruling', action: a.id, verdict: r.verdict, text: clampText(r.text, RULING_LIMIT).text, evidenceOk: r.evidenceOk, ...pts, tokens: i === 0 ? tokens : ZERO });
+          judged(a.kind, r.verdict);
+        });
       }
 
       lastRoundTokens = Math.max(1, s.tokens - before);
