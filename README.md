@@ -12,7 +12,7 @@
 [![Status](https://img.shields.io/badge/status-Phase%200%20%E2%80%A2%20engine%20ready-a78bfa?style=flat-square)](PLAN.md)
 [![Tests](https://img.shields.io/badge/tests-26%20passing-4cc9f0?style=flat-square)](#-快速开始)
 
-### [▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/) · [⬇ 下载桌面版（Windows）](https://github.com/Jason-Zhang-xiquan/crux-arena/releases/latest)
+### [▶ 在线试玩](https://jason-zhang-xiquan.github.io/crux-arena/) · [⬇ 下载桌面版（Windows）](https://github.com/Jason-Zhang-xiquan/crux-arena/releases)
 
 [English](#-english) · [完整方案](PLAN.md) · [快速开始](#-快速开始)
 
@@ -35,7 +35,7 @@ Crux Arena 把这件事变成一场比赛：
 
 ## 🖥️ 桌面版：快捷键一按，小 AI 在桌面上打架
 
-**[⬇ 下载 Windows 安装包](https://github.com/Jason-Zhang-xiquan/crux-arena/releases/latest)**（预览版，未签名：首次运行时 SmartScreen 会提示，点"更多信息 → 仍要运行"）
+**[⬇ 下载 Windows 安装包](https://github.com/Jason-Zhang-xiquan/crux-arena/releases)**（预览版，未签名：首次运行时 SmartScreen 会提示，点"更多信息 → 仍要运行"）
 
 1. 按 **`Ctrl+Alt+Space`**（被占用时自动换成 `Ctrl+Shift+Space`，托盘里可以看到当前快捷键），弹出输入框。
 2. 写问题，可选一个**文件夹**（只读）、**模式**、**上场选手**（2–6 名，会记住上次的选择）。
