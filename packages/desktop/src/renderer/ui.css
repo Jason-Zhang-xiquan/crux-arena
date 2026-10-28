@@ -12,3 +12,4 @@ canvas{image-rendering:pixelated;display:block}
 .btn:hover{background:#3d2f70}
 .btn:active{transform:translateY(1px)}
 .hint{color:var(--dim)}
+[hidden]{display:none!important}

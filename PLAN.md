@@ -390,8 +390,10 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 - [x] 冠军答案卡片：复制答案、查看战报、打开存档
 - [x] 文件夹模式真实侦察：仓库地图 + 只读读取，审计进事件流
 - [x] 存档：每场写 events.jsonl + battle-log.md；自测模式自动截图
-- [ ] 回放播放器（读 events.jsonl）：播放逻辑已就绪，缺打开存档的入口
-- [ ] 设置页：自定义快捷键、默认阵容；安装包（electron-builder）
+- [x] 回放：输入框里的最近比赛列表、托盘"回放最近一场 / 打开存档回放"、结果卡"再看一遍"
+- [x] 设置页：录制自定义快捷键（被占用时自动退到备选）、默认倍速、战报面板、存档位置、开机自启
+- [x] Windows 安装包：esbuild 把主进程打成单文件，electron-builder 生成 NSIS 安装程序（`npm run desktop:dist`）
+- [ ] 安装包代码签名（未签名时 Windows SmartScreen 会提示）、自动更新、macOS 版
 - 实测：`Ctrl+Alt+Space` 在作者机器上已被占用，自动退到 `Ctrl+Shift+Space`
 
 ### Phase 2 — 噱头打磨（约 1–2 周）

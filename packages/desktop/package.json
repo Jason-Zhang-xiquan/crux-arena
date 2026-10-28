@@ -1,18 +1,25 @@
 {
   "name": "@crux/desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/main.ts",
   "scripts": {
     "start": "electron .",
-    "selftest": "electron . --selftest"
+    "selftest": "electron . --selftest",
+    "build": "node scripts/build.ts",
+    "dist": "node scripts/build.ts && electron-builder --win"
   },
   "dependencies": {
     "@crux/cli": "0.0.0",
     "@crux/engine": "0.0.0"
   },
   "devDependencies": {
-    "electron": "44.7.1"
-  }
+    "electron": "44.7.1",
+    "electron-builder": "26.16.1",
+    "esbuild": "0.28.2"
+  },
+  "description": "快捷键唤出，小 AI 们在桌面上打一架再给你答案",
+  "author": "Jason Zhang",
+  "license": "MIT"
 }

@@ -44,6 +44,18 @@ document.querySelectorAll('#mode button').forEach(b => { b.onclick = () => { sta
 $('#pick').onclick = async () => { const d = await window.crux.pickFolder(); if (d) { state.dir = d; render(); } };
 $('#clear').onclick = () => { state.dir = ''; render(); };
 $('#close').onclick = () => window.crux.hideLauncher();
+$('#settingsBtn').onclick = () => window.crux.openSettings();
+
+// 回放：最近比赛列表
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+$('#replayBtn').onclick = async () => {
+  const list = await window.crux.listMatches();
+  $('#recentList').innerHTML = list.length ? list.map((m, i) => `<div class="match"><div class="q"><div>${esc(m.question)}</div><div class="meta">${m.mode === 'team' ? 'TEAM' : 'FFA'} · ${esc(m.fighters.join(' · '))} · ${new Date(m.when).toLocaleString()}${m.finished ? '' : ' · 未打完'}</div></div><button class="btn" data-i="${i}">回放</button></div>`).join('') : '<div class="empty">还没有比赛存档，先打一场吧。</div>';
+  $('#recentList').querySelectorAll('button').forEach(b => { b.onclick = () => window.crux.replay(list[Number(b.dataset.i)].dir); });
+  $('#recent').hidden = false;
+};
+$('#closeRecent').onclick = () => { $('#recent').hidden = true; };
+$('#pickOther').onclick = () => window.crux.pickReplay();
 $('#q').addEventListener('input', render);
 
 async function fight() {
@@ -54,7 +66,7 @@ async function fight() {
 }
 $('#go').onclick = fight;
 addEventListener('keydown', e => {
-  if (e.key === 'Escape') window.crux.hideLauncher();
+  if (e.key === 'Escape') { if (!$('#recent').hidden) $('#recent').hidden = true; else window.crux.hideLauncher(); }
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); fight(); }
 });
 
@@ -65,12 +77,12 @@ setInterval(() => {
   for (const [id, t] of Object.entries(tiles)) drawPose(t.canvas, t.kind, state.team.includes(id) && frame % 2 ? 'idle2' : 'idle');
 }, 450);
 
-window.crux.onShown(() => { $('#err').textContent = ''; $('#q').focus(); $('#q').select(); });
+window.crux.onShown(() => { $('#err').textContent = ''; $('#recent').hidden = true; $('#q').focus(); $('#q').select(); });
 
 window.crux.settings().then(s => {
   state = { team: s.team.filter(id => tiles[id]).slice(0, MAX), mode: s.mode, dir: s.dir };
   $('#q').value = s.question || '';
-  $('#hotkey').textContent = s.hotkey || '未注册';
+  $('#hotkey').textContent = s.hotkeyActive || '未注册';
   render();
   $('#q').focus();
   $('#q').select();

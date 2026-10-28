@@ -3,3 +3,6 @@ matches/
 *.log
 .DS_Store
 .claude/
+packages/desktop/app/
+packages/desktop/release/
+packages/desktop/build/

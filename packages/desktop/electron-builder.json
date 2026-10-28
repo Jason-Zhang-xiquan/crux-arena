@@ -1,0 +1,25 @@
+{
+  "appId": "io.github.jason-zhang-xiquan.crux-arena",
+  "productName": "Crux Arena",
+  "electronVersion": "44.7.1",
+  "directories": {
+    "app": "app",
+    "output": "release",
+    "buildResources": "build"
+  },
+  "asar": true,
+  "artifactName": "CruxArena-Setup-${version}.${ext}",
+  "win": {
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
+    "icon": "build/icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Crux Arena",
+    "runAfterFinish": true
+  }
+}

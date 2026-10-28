@@ -38,9 +38,11 @@ Crux Arena 把这件事变成一场比赛：
 1. 按 **`Ctrl+Alt+Space`**（被占用时自动换成 `Ctrl+Shift+Space`，托盘里可以看到当前快捷键），弹出输入框。
 2. 写问题，可选一个**文件夹**（只读）、**模式**、**上场选手**（2–6 名，会记住上次的选择）。
 3. `Ctrl+Enter` 开打：小 AI 们站在**任务栏上方**的透明窗口里打架，空白处鼠标可以穿透，不挡你干活。
-4. 打完弹出**冠军答案卡片**：复制答案、查看战报、打开存档。每场都存成 `events.jsonl` + `battle-log.md`。
+4. 打完弹出**冠军答案卡片**：复制答案、查看战报、打开存档、再看一遍。每场都存成 `events.jsonl` + `battle-log.md`。
+5. **回放**：输入框里的"回放"列出最近的比赛，托盘里也能"回放最近一场 / 打开存档回放"。
+6. **设置**：录制自定义快捷键、默认倍速、战报面板、存档位置、开机自启。
 
-<img src="docs/assets/desktop-launcher.png" alt="桌面版输入框" width="56%">
+<img src="docs/assets/desktop-launcher.png" alt="桌面版输入框" width="49%"> <img src="docs/assets/desktop-settings.png" alt="桌面版设置页" width="45%">
 
 <img src="docs/assets/desktop-battle.png" alt="桌面版：小 AI 在任务栏上方组队对战" width="100%">
 
@@ -141,7 +143,8 @@ npm install
 
 ```bash
 npm run desktop            # 桌面版：托盘常驻，快捷键唤出
-npm run desktop:selftest   # 自测：自动开打一场并截图
+npm run desktop:selftest   # 自测：输入框 → 设置 → 开打 → 回放，全程截图
+npm run desktop:dist       # 打 Windows 安装包，输出到 packages/desktop/release/
 ```
 
 ```bash
@@ -174,7 +177,8 @@ PLAN.md        完整方案：调研、机制、日志规范、视觉、路线�
 
 - [x] **Phase 0**：引擎状态机、事件 schema、battle-log 生成器、只读文件夹工具、CLI、测试
 - [x] **桌面版**：快捷键唤出、任务栏上方的事件驱动竞技场、冠军答案卡片、文件夹只读侦察、存档、自测截图
-- [ ] 桌面版回放、设置页（自定义快捷键）、安装包
+- [x] 桌面版回放、设置页（自定义快捷键）、Windows 安装包
+- [ ] 安装包代码签名、自动更新、macOS 版
 - [ ] 接入真实模型（OpenRouter / 各家直连 / Ollama）+ 评测：单模型 vs 多数投票 vs 竞技场
 - [ ] **Phase 2**：精修精灵与音效、攻擂 / 淘汰赛 / 速决 / 讨伐 BOSS、跨比赛"说服力"排行榜
 - [ ] **Phase 3**：`npx crux-arena` 一行启动、在线回放站、Claude Code / MCP 插件

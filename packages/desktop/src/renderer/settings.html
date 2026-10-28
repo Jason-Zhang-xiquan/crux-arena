@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:">
+<title>Crux Arena 设置</title>
+<script src="fonts.js"></script>
+<link href="ui.css" rel="stylesheet">
+<style>
+  html,body{background:transparent;height:100%}
+  body{margin:0;padding:14px;overflow:hidden}
+  .panel{height:100%;display:flex;flex-direction:column;gap:14px;padding:16px 18px;background:#110c22;border:3px solid #000;box-shadow:0 0 0 3px var(--gold),8px 8px 0 rgba(0,0,0,.45);overflow:auto}
+  .top{display:flex;align-items:center;gap:10px;-webkit-app-region:drag;user-select:none}
+  .top h1{margin:0;font-family:var(--px);font-size:14px;color:var(--gold);text-shadow:2px 2px 0 #7a3b00}
+  .top button{margin-left:auto;-webkit-app-region:no-drag}
+  section{padding:10px 12px;background:#16112a;border:2px solid #000;box-shadow:0 0 0 2px var(--line)}
+  h2{margin:0 0 8px;font-family:var(--px);font-size:9px;color:var(--gold);font-weight:normal}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .key{min-width:220px;padding:8px 10px;background:#0b0816;border:3px solid #000;box-shadow:0 0 0 2px var(--line);font-family:var(--px);font-size:10px;color:var(--ink)}
+  .key.rec{box-shadow:0 0 0 2px var(--gold);color:var(--gold)}
+  .seg{display:flex;gap:6px}
+  .seg button.on{background:var(--gold);color:#000}
+  .path{flex:1;min-width:0;padding:7px 10px;background:#0b0816;border:3px solid #000;box-shadow:0 0 0 2px var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .msg{min-height:16px;margin-top:6px;line-height:16px}
+  .msg.ok{color:var(--green)} .msg.bad{color:var(--red)}
+  label.chk{display:flex;align-items:center;gap:8px;cursor:pointer}
+  label.chk input{width:16px;height:16px;accent-color:var(--gold)}
+  .about{color:var(--dim);line-height:18px}
+  .about b{color:var(--gold);font-weight:normal}
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="top"><h1>SETTINGS · 设置</h1><button class="btn" id="close">CLOSE</button></div>
+
+  <section>
+    <h2>HOTKEY · 唤出快捷键</h2>
+    <div class="row">
+      <span class="key" id="key">—</span>
+      <button class="btn" id="record">录制</button>
+      <button class="btn" id="auto">自动</button>
+    </div>
+    <div class="msg hint" id="keyMsg">点"录制"后直接按下新组合，需要至少一个 Ctrl / Alt / Shift。</div>
+  </section>
+
+  <section>
+    <h2>PLAYBACK · 播放</h2>
+    <div class="row" style="margin-bottom:8px"><span class="hint" style="width:90px">默认倍速</span><div class="seg" id="speed"><button class="btn" data-v="1">1X</button><button class="btn" data-v="2">2X</button><button class="btn" data-v="4">4X</button></div></div>
+    <div class="row"><span class="hint" style="width:90px">战报面板</span><div class="seg" id="logPanel"><button class="btn" data-v="auto">自动</button><button class="btn" data-v="open">展开</button><button class="btn" data-v="closed">收起</button></div></div>
+  </section>
+
+  <section>
+    <h2>ARCHIVE · 存档</h2>
+    <div class="row"><span class="path" id="matches"></span><button class="btn" id="changeDir">更改</button><button class="btn" id="resetDir">默认</button><button class="btn" id="openDir">打开</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="replayPick">打开存档回放…</button></div>
+  </section>
+
+  <section>
+    <h2>SYSTEM · 系统</h2>
+    <label class="chk"><input type="checkbox" id="autoLaunch"> 开机自动启动（常驻托盘）</label>
+  </section>
+
+  <div class="about">
+    <b>Crux Arena</b> <span id="ver"></span> · 当前是<b>演示大脑</b>，还没接入真实模型。<br>
+    文件夹模式只读：只能列目录、读文件、搜索，不会写入任何东西。<br>
+    <a href="#" id="repo" style="color:var(--blue)">GitHub 仓库</a>
+  </div>
+</div>
+<script src="settings.js"></script>
+</body>
+</html>

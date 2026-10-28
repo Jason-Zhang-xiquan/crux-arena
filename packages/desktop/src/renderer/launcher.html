@@ -37,6 +37,17 @@
   .go{font-family:var(--px);font-size:12px;color:#000;background:var(--gold);border:3px solid #000;box-shadow:0 0 0 2px #7a3b00;padding:12px 16px;cursor:pointer}
   .go:disabled{opacity:.45;cursor:not-allowed}
   .err{color:var(--red);min-height:14px}
+  .top .btn{-webkit-app-region:no-drag}
+  .panel{position:relative}
+  #recent{position:absolute;left:18px;right:18px;top:62px;bottom:18px;display:flex;flex-direction:column;gap:8px;padding:12px;background:#0e0920;border:3px solid #000;box-shadow:0 0 0 2px var(--gold);z-index:5}
+  #recent h3{margin:0;font-family:var(--px);font-size:9px;color:var(--gold);font-weight:normal;display:flex;align-items:center;gap:8px}
+  #recent h3 .btn{margin-left:auto}
+  #recentList{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px}
+  .match{display:flex;align-items:center;gap:10px;padding:7px 9px;background:#16112a;border-left:4px solid var(--gold)}
+  .match .q{flex:1;min-width:0}
+  .match .q div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .match .meta{color:var(--dim);margin-top:3px}
+  .empty{color:var(--dim);padding:20px;text-align:center}
 </style>
 </head>
 <body>
@@ -44,6 +55,8 @@
   <div class="top">
     <h1>CRUX ARENA</h1>
     <span class="key">唤出 <b id="hotkey">—</b></span>
+    <button class="btn" id="replayBtn" title="回放以前的比赛">回放</button>
+    <button class="btn" id="settingsBtn" title="设置">设置</button>
     <button class="btn" id="close" title="收起（Esc）">ESC</button>
   </div>
   <textarea id="q" placeholder="写下你的难题，例如：这个仓库的后端该继续单体，还是拆成微服务？" spellcheck="false"></textarea>
@@ -70,6 +83,10 @@
   <div class="foot">
     <div class="demo"><b>演示大脑</b>：还没接入真实模型，对战内容是规则驱动的演示剧本；文件夹会被真实地只读侦察。</div>
     <button class="go" id="go">FIGHT!</button>
+  </div>
+  <div id="recent" hidden>
+    <h3>REPLAY · 最近的比赛<button class="btn" id="pickOther">其他存档…</button><button class="btn" id="closeRecent">返回</button></h3>
+    <div id="recentList"></div>
   </div>
 </div>
 <script src="../../../sprites/mascots.js"></script>

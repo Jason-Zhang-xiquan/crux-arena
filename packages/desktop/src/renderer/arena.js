@@ -20,7 +20,10 @@ const S = { start: null, fighters: {}, claims: {}, actions: {}, edges: [], token
 const logW = () => ($('#log').classList.contains('collapsed') ? 0 : 380);
 const cx = () => (innerWidth - logW()) / 2;
 const BASE = () => innerHeight - 22;            // 选手脚底
-if (innerWidth < 1500) $('#log').classList.add('collapsed');
+const LOG = QS.get('log') ?? 'auto';
+const REPLAY = QS.get('replay') === '1';
+if (LOG === 'closed' || (LOG === 'auto' && innerWidth < 1500)) $('#log').classList.add('collapsed');
+if (REPLAY) { const b = document.createElement('span'); b.className = 'demo'; b.style.background = 'var(--blue)'; b.textContent = 'REPLAY'; $('#hud .demo').after(b); }
 
 function layoutFighters() {
   const ids = S.start?.fighters.map(f => f.id) ?? [];
@@ -309,13 +312,14 @@ function showResult() {
   if (!f) return;
   const ws = S.start?.workspace;
   r.innerHTML = `<h2>CHAMPION ANSWER</h2>
-    <div class="sub">${S.start.mode === 'team' ? 'TEAM · 红 vs 蓝' : 'FFA · 混战'} · 演示大脑（未接真实模型，内容为演示剧本）${ws ? ` · 📁 只读：读取 ${S.reads} 次，写入 0 次` : ''}</div>
+    <div class="sub">${REPLAY ? '回放 · ' : ''}${S.start.mode === 'team' ? 'TEAM · 红 vs 蓝' : 'FFA · 混战'} · 演示大脑（未接真实模型，内容为演示剧本）${ws ? ` · 📁 只读：读取 ${S.reads} 次，写入 0 次` : ''}</div>
     <div class="champ">${esc(f.answer)}</div>
     <div class="notes"><div class="note"><b>MINORITY · 少数派</b>${esc(f.minority.join('；') || '无')}</div><div class="note"><b>YOUR CALL · 需要你判断</b>${esc(f.userCruxes.join('；') || '无')}</div></div>
     <div class="acts">
       <button class="btn" id="copyAns">复制答案</button>
       <button class="btn" id="viewLog">查看战报</button>
       <button class="btn" id="openDir">打开存档</button>
+      <button class="btn" id="again">再看一遍</button>
       <button class="btn" id="closeRes">关闭</button>
       <span class="stats">${fmtK(S.ended?.totalTokens ?? S.tokens)} tok · 省 ${fmtK(S.saved)} · 置信度 ${Math.round(f.confidence * 100)}%</span>
     </div>`;
@@ -324,6 +328,7 @@ function showResult() {
   $('#copyAns').onclick = () => { window.crux.copy(f.answer); $('#copyAns').textContent = '已复制'; };
   $('#viewLog').onclick = () => { $('#fullText').textContent = S.done?.battleLog ?? '战报还在写入…'; $('#full').hidden = false; };
   $('#openDir').onclick = () => window.crux.openMatch();
+  $('#again').onclick = () => window.crux.replayCurrent();
   $('#closeRes').onclick = () => window.crux.closeArena();
 }
 $('#copyLog').onclick = () => window.crux.copy($('#fullText').textContent);

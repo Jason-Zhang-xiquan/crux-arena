@@ -14,7 +14,8 @@
     "demo": "node packages/cli/src/main.ts demo",
     "crux": "node packages/cli/src/main.ts",
     "desktop": "electron packages/desktop",
-    "desktop:selftest": "electron packages/desktop --selftest"
+    "desktop:selftest": "electron packages/desktop --selftest",
+    "desktop:dist": "npm run dist -w @crux/desktop"
   },
   "devDependencies": {
     "@types/node": "25.9.9",
