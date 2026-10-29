@@ -56,6 +56,8 @@
     <h2>AGENT · 从 agent 拉起的对局</h2>
     <div class="row"><span class="hint" style="width:90px">显示方式</span><div class="seg" id="agentDisplay"><button class="btn" data-v="full">完整竞技场</button><button class="btn" data-v="mini">角落小窗</button><button class="btn" data-v="none">纯后台</button></div></div>
     <div class="msg hint">在 Claude Code、Cursor、Codex 等 agent 里说"跟 codex、gemini 讨论一下…"，会用这里的默认值开打（crux fight）。</div>
+    <div class="row" style="margin-top:8px"><span class="hint" style="width:90px">crux 命令</span><button class="btn" id="installCli">安装 crux 命令</button><span class="hint" id="cliState"></span></div>
+    <div class="msg hint" id="cliMsg">agent 靠 crux 命令拉起对局。装好后在终端运行 crux setup，给 Claude Code 装上 skill。</div>
   </section>
 
   <section>

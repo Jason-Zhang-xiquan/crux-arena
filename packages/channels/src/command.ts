@@ -15,13 +15,16 @@ export function runProcess(file: string, args: string[], o: { stdin?: string; en
   const t0 = Date.now();
   const maxBytes = o.maxBytes ?? 2_000_000;
   return new Promise(resolve => {
-    const child = spawn(file, args, { cwd: o.cwd, env: o.env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    // POSIX 上单独成一个进程组，超时时能连同孙进程一起杀掉
+    const win = process.platform === 'win32';
+    const child = spawn(file, args, { cwd: o.cwd, env: o.env, windowsHide: true, detached: !win, stdio: ['pipe', 'pipe', 'pipe'] });
     const out: Buffer[] = [], err: Buffer[] = [];
     let size = 0, timedOut = false, tooLarge = false, done = false, killed = false;
-    // 杀整棵进程树（Windows 上 child.kill 只杀直接子进程）；杀完 5 秒还没等到 close（比如有孙进程占着管道），就不等了
+    // 杀整棵进程树（child.kill 只杀直接子进程）；杀完 5 秒还没等到 close（比如有孙进程占着管道），就不等了
     const kill = () => {
       if (killed) return; killed = true;
-      if (process.platform === 'win32' && child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => child.kill());
+      if (win && child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => child.kill());
+      else if (child.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); } }
       else child.kill();
       setTimeout(() => { child.stdout.destroy(); child.stderr.destroy(); finish(null, '\n（进程已终止，没有等到输出关闭）'); }, 5000).unref();
     };
@@ -82,9 +85,28 @@ export function cursorModelFor(base: string, effort: Effort, available: Set<stri
   return options[0].id;
 }
 
-export function findCursorAgent(): { node: string; script: string } | undefined {
+/** 在 PATH 里找可执行文件。Windows 上只认 .exe：.cmd / .bat 必须经过 shell 才能启动，我们不走 shell */
+export function findOnPath(names: string[], env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
+  for (const name of names) for (const dir of dirs) {
+    const file = path.join(dir, process.platform === 'win32' && !name.endsWith('.exe') ? `${name}.exe` : name);
+    if (existsSync(file)) return file;
+  }
+  return undefined;
+}
+const firstExisting = (files: Array<string | undefined>) => files.find((f): f is string => !!f && existsSync(f));
+
+/** 启动 Cursor Agent 的方式：可执行文件 + 前置参数。CURSOR_AGENT_PATH 可以手动指定 */
+export function findCursorAgent(): { file: string; prefix: string[] } | undefined {
+  if (process.env.CURSOR_AGENT_PATH && existsSync(process.env.CURSOR_AGENT_PATH)) return { file: process.env.CURSOR_AGENT_PATH, prefix: [] };
+  if (process.platform !== 'win32') {
+    // macOS / Linux：官方安装脚本放在 ~/.local/bin/cursor-agent（带 shebang 的脚本，可以直接启动）
+    const file = firstExisting([path.join(os.homedir(), '.local', 'bin', 'cursor-agent'), findOnPath(['cursor-agent'])]);
+    return file ? { file, prefix: [] } : undefined;
+  }
+  // Windows：cursor-agent.cmd 要经过 shell，改为直接用它自带的 node.exe 跑 index.js
   const root = path.join(process.env.LOCALAPPDATA ?? '', 'cursor-agent');
-  if (existsSync(path.join(root, 'node.exe')) && existsSync(path.join(root, 'index.js'))) return { node: path.join(root, 'node.exe'), script: path.join(root, 'index.js') };
+  if (existsSync(path.join(root, 'node.exe')) && existsSync(path.join(root, 'index.js'))) return { file: path.join(root, 'node.exe'), prefix: [path.join(root, 'index.js')] };
   const versions = path.join(root, 'versions');
   if (!existsSync(versions)) return undefined;
   const dirs = readdirSync(versions).filter(d => /^\d{4}\.\d{1,2}\.\d{1,2}(-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$/.test(d)).sort((a, b) => {
@@ -93,7 +115,7 @@ export function findCursorAgent(): { node: string; script: string } | undefined 
   });
   for (const d of dirs) {
     const node = path.join(versions, d, 'node.exe'), script = path.join(versions, d, 'index.js');
-    if (existsSync(node) && existsSync(script)) return { node, script };
+    if (existsSync(node) && existsSync(script)) return { file: node, prefix: [script] };
   }
   return undefined;
 }
@@ -103,7 +125,7 @@ export async function cursorChannel(o: { concurrency?: number; timeoutMs?: numbe
   if (!bin) throw new Error('没有找到 Cursor Agent（cursor-agent）');
   const env = minimalEnv({ CURSOR_INVOKED_AS: 'cursor-agent.cmd' });
   const exec = (args: (dir: string) => string[], stdin?: string, timeoutMs?: number) =>
-    withSandbox(dir => runProcess(bin.node, [bin.script, ...args(dir)], { env, cwd: dir, stdin, timeoutMs }));
+    withSandbox(dir => runProcess(bin.file, [...bin.prefix, ...args(dir)], { env, cwd: dir, stdin, timeoutMs }));
   // 只读模型列表：不发起对话、不耗额度
   const list = await exec(() => ['--list-models'], undefined, 60_000);
   const models = new Set(list.stdout.split(/\r?\n/).map(l => l.match(/^([a-z0-9][\w.-]*) - /i)?.[1]).filter((x): x is string => !!x));
@@ -134,9 +156,18 @@ export async function cursorChannel(o: { concurrency?: number; timeoutMs?: numbe
 
 const CLAUDE_EFFORT: Record<Effort, string | undefined> = { off: undefined, low: 'low', medium: 'medium', high: 'high', max: 'max' };
 
+/** Claude Code 可执行文件：CLAUDE_CODE_PATH > 原生安装（~/.local/bin）> npm 全局安装 > PATH */
 export function findClaudeCode(): string | undefined {
-  const npm = path.join(process.env.APPDATA ?? '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
-  return existsSync(npm) ? npm : undefined;
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    return firstExisting([
+      process.env.CLAUDE_CODE_PATH,
+      path.join(home, '.local', 'bin', 'claude.exe'),
+      path.join(process.env.APPDATA ?? '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
+      findOnPath(['claude']),
+    ]);
+  }
+  return firstExisting([process.env.CLAUDE_CODE_PATH, path.join(home, '.local', 'bin', 'claude'), path.join(home, '.claude', 'local', 'claude'), findOnPath(['claude'])]);
 }
 
 

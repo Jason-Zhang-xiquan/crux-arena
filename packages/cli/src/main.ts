@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { ScriptedBrains, createRecorder, demoConfig, demoScript, parseEventLines, renderBattleLog, runMatch } from '@crux/engine';
 import { WorkspaceError, openWorkspace } from '@crux/workspace';
 import type { LensSet } from '@crux/channels';
+import { assetPath, docPath } from './assets.ts';
 import { detachJob, ensureDesktop, listMatches, readMatch, resolveMatch, summarize, waitForMatch } from './jobs.ts';
 import { blankMascot, builtinIds, checkMascot, exportBuiltin, formatMascot, loadUserMascots, mascotsDir, previewPng } from './mascots.ts';
 import type { MascotData } from './mascots.ts';
@@ -242,15 +243,14 @@ async function main(argv: string[]) {
 
   if (cmd === 'setup') {
     // 把仓库里的 Claude Code skill 全部装到用户目录（所有项目可用）；其他 agent 的接法见 docs/agents.md
-    const root = path.resolve(import.meta.dirname, '..', '..', '..');
-    const src = path.join(root, 'integrations', 'claude-code');
+    const src = assetPath('integrations', 'claude-code');
     for (const name of await readdir(src)) {
       const dest = path.join(os.homedir(), '.claude', 'skills', name);
       await mkdir(dest, { recursive: true });
       await cp(path.join(src, name), dest, { recursive: true });
       console.log(`已安装 Claude Code skill：${dest}`);
     }
-    console.log(`\n在 Claude Code 里可以说：\n  "跟 codex、gemini 讨论一下…"   → crux-arena（拉起对局）\n  "给我的 llama 画个形象"         → crux-mascot（画 / 改形象）\n  "把我的 ollama 接进竞技场"      → crux-channel（自定义通道）\nCursor、Codex 等其他 agent：把 ${path.join(root, 'docs', 'agents.md')} 里的说明加进它们的规则文件。`);
+    console.log(`\n在 Claude Code 里可以说：\n  "跟 codex、gemini 讨论一下…"   → crux-arena（拉起对局）\n  "给我的 llama 画个形象"         → crux-mascot（画 / 改形象）\n  "把我的 ollama 接进竞技场"      → crux-channel（自定义通道）\nCursor、Codex 等其他 agent：把 ${docPath('agents.md')} 里的说明加进它们的规则文件。`);
     return;
   }
 

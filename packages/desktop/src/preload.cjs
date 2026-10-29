@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('crux', {
   copy: text => ipcRenderer.send('clipboard', String(text)),
   // 通道：真实模型模式下哪些选手能上场
   channels: () => ipcRenderer.invoke('channels:status'),
+  useDemo: () => ipcRenderer.invoke('brains:demo'),
+  // 命令行：安装包自带的 crux
+  cliStatus: () => ipcRenderer.invoke('cli:status'),
+  installCli: () => ipcRenderer.invoke('cli:install'),
   // 角落小窗（agent 拉起的后台对局）
   onMini: cb => ipcRenderer.on('mini:update', (_e, d) => cb(d)),
   miniExpand: () => ipcRenderer.send('mini:expand'),

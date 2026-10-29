@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRecorder, fighterSpecs, runMatch } from '@crux/engine';
-import { LlmBrains, classify, cursorModelFor, extractJson, limit, minimalEnv, runProcess } from '../src/index.ts';
+import { LlmBrains, classify, cursorModelFor, extractJson, findOnPath, limit, minimalEnv, runProcess } from '../src/index.ts';
 import type { Channel, ChannelRequest, ChannelResult, Seat } from '../src/index.ts';
 
 test('档位映射：取最接近的一档，同样近时取低一档；没有档位变体就用原名', () => {
@@ -142,4 +142,19 @@ test('盲答不到 2 人交卷：判对局无效，不调用裁判，也不当�
     assert.ok(fin?.type === 'final' && fin.confidence <= 0.3);
     assert.equal(ch.calls.some(r => r.task === 'final'), ok === 1, '只有一人作答时才请主席综合');
   }
+});
+
+test('PATH 查找：Windows 只认 .exe（.cmd 要经过 shell，不用），找不到返回 undefined', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'crux-path-'));
+  try {
+    const exe = process.platform === 'win32' ? 'tool.exe' : 'tool';
+    await writeFile(path.join(dir, exe), '');
+    await writeFile(path.join(dir, 'other.cmd'), '');
+    assert.equal(findOnPath(['tool'], { PATH: dir }), path.join(dir, exe));
+    assert.equal(findOnPath(['missing'], { PATH: dir }), undefined);
+    if (process.platform === 'win32') assert.equal(findOnPath(['other'], { PATH: dir }), undefined);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

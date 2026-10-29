@@ -3,6 +3,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import vm from 'node:vm';
+import { assetPath } from './assets.ts';
 import { encodePng, parseHex } from './png.ts';
 import { dataDir } from './settings.ts';
 
@@ -32,7 +33,7 @@ interface SpriteLib {
 let lib: SpriteLib | undefined;
 async function spriteLib(): Promise<SpriteLib> {
   if (lib) return lib;
-  const file = path.resolve(import.meta.dirname, '..', '..', 'sprites', 'mascots.js');
+  const file = assetPath('packages', 'sprites', 'mascots.js');
   const code = await readFile(file, 'utf8');
   lib = vm.runInNewContext(`${code}\n;({ MASCOTS, ROSTER })`, {}, { filename: file }) as SpriteLib;
   return lib;

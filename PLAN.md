@@ -629,6 +629,13 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 - [x] 自审修复（来自一场 4 人代码审查对局，逐条核实后修）：交出盲答不到 2 人判"对局无效"而不是完美收敛；每次调用新建空沙箱目录、环境变量白名单（不再把宿主会话凭据传给命令行）；超时杀整棵进程树并兜底返回；事件写入失败不再静默丢事件；JSON 解析容忍尾随文字
 - [ ] 只读工具的符号链接 TOCTOU（需要有人在比赛进行中改仓库，风险低）
 - [x] 自定义通道（§6.7 三种方式落地）：`channels.json` 里的 openai / command / script 通道；自定义选手、改自带选手的通道、指定裁判 / 主席；`crux channel list|test`；模拟选手脚本（零成本试跑）；docs/channels.md + crux-channel skill
+- [x] v0.2 发布准备：
+  - macOS / Linux 的通道查找（PATH、`~/.local/bin`，可用 `CURSOR_AGENT_PATH` / `CLAUDE_CODE_PATH` 指定），超时时杀整个进程组；
+  - CLI 打包成单文件 JS（`packages/cli/dist`，npm 包名 crux-arena）；
+  - 安装包自带 crux 命令（Electron 当 Node 运行，设置页一键写启动脚本）；
+  - 首次启动探测通道：没有就用演示模式，有就选能上场的阵容；
+  - 桌面版启动晚于比赛结束时，仍会显示刚打完的 agent 对局。
+- [ ] macOS / Linux 安装包（需要在对应系统上构建，或交给 CI）；npm 发布 crux-arena；GitHub Actions 跑测试
 - [x] 自定义形象：24×20 四姿势像素表（docs/mascots.md），同编号覆盖自带形象；`crux mascot export|new|check|preview|reset`；新选手没画形象时用同色史莱姆；桌面版托盘"重新加载"；crux-mascot skill
 - [x] 桌面版接管 agent 拉起的对局：完整竞技场 / 角落小窗 / 纯后台；没开时自动在后台拉起；设置页"模型与额度""agent 对局"，与 CLI 共用默认值
 - [x] 基于提示词的 LLM 大脑：盲答、分歧提取、动作（结构化输出 + 校验重试）、裁判、主席；文件证据由引擎读原文核对，不信模型自报

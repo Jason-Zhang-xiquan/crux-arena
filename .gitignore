@@ -6,3 +6,4 @@ matches/
 packages/desktop/app/
 packages/desktop/release/
 packages/desktop/build/
+packages/cli/dist

@@ -77,4 +77,16 @@ $('#replayPick').onclick = () => window.crux.pickReplay();
 $('#repo').onclick = e => { e.preventDefault(); window.crux.openPath('repo'); };
 $('#close').onclick = () => window.crux.closeSettings();
 
-window.crux.settings().then(v => { s = v; render(); if (s.hotkeyError) msg(s.hotkeyError, 'bad'); showChannels(); });
+async function showCli() {
+  const c = await window.crux.cliStatus();
+  $('#cliState').textContent = c.ours ? `已安装（${c.target}）` : c.installed ? '已有别的 crux 命令' : '未安装';
+  $('#installCli').textContent = c.ours ? '重新安装' : '安装 crux 命令';
+  $('#installCli').disabled = !c.available || (c.installed && !c.ours);
+}
+$('#installCli').onclick = async () => {
+  const r = await window.crux.installCli();
+  const m = $('#cliMsg'); m.textContent = r.message; m.className = `msg ${r.ok ? 'ok' : 'bad'}`;
+  showCli();
+};
+
+window.crux.settings().then(v => { s = v; render(); if (s.hotkeyError) msg(s.hotkeyError, 'bad'); showChannels(); showCli(); });

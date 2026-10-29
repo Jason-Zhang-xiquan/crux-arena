@@ -84,7 +84,14 @@ setInterval(() => {
 
 const loadChannels = () => window.crux.channels().then(c => {
   channels = c;
-  if (c.real) $('#brainNote').innerHTML = `<b>真实模型</b>：走本机已登录的通道，能上场 ${Object.keys(c.models).length} 人，会消耗你的会员额度；文件夹只读。`;
+  const note = $('#brainNote');
+  const n = Object.keys(c.models).length;
+  if (c.real && n) note.innerHTML = `<b>真实模型</b>：走本机已登录的通道，能上场 ${n} 人，会消耗你的会员额度；文件夹只读。`;
+  else if (c.real) {
+    // 选了真实模型但一条通道都没有：告诉用户怎么接，或者先用演示模式
+    note.innerHTML = '<b>没有可用通道</b>：终端里运行 <code>cursor-agent login</code> 或 <code>claude auth login</code> 登录会员，或在 channels.json 里接 OpenRouter / Ollama（见 docs/channels.md）。 <button class="btn" id="useDemo">先用演示模式</button>';
+    $('#useDemo').onclick = async () => { await window.crux.useDemo(); loadChannels(); };
+  } else note.innerHTML = '<b>演示大脑</b>：不调用模型，对战内容是演示剧本。登录 Cursor Agent 或 Claude Code 后，可以在设置里切到真实模型。';
   render();
 });
 window.crux.onShown(() => { $('#err').textContent = ''; $('#recent').hidden = true; $('#q').focus(); $('#q').select(); loadChannels(); });

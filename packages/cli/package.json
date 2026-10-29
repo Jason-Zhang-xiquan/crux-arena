@@ -17,5 +17,8 @@
     "./settings": "./src/settings.ts",
     "./jobs": "./src/jobs.ts",
     "./mascots": "./src/mascots.ts"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts"
   }
 }

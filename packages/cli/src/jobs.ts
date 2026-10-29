@@ -117,11 +117,14 @@ export async function ensureDesktop(): Promise<'running' | 'started' | 'unavaila
   if (await desktopRunning()) return 'running';
   const desktopDir = path.resolve(import.meta.dirname, '..', '..', 'desktop');
   let cmd: string | undefined, args: string[] = [];
-  if (process.env.CRUX_DESKTOP) cmd = process.env.CRUX_DESKTOP;                      // 安装版：指向 Crux Arena.exe
+  if (process.env.CRUX_DESKTOP && existsSync(process.env.CRUX_DESKTOP)) cmd = process.env.CRUX_DESKTOP;   // 安装版自带的 crux 命令会设好：指向 Crux Arena.exe
   else if (existsSync(path.join(desktopDir, 'package.json'))) {
     try { cmd = createRequire(path.join(desktopDir, 'package.json'))('electron') as unknown as string; args = [desktopDir]; } catch { /* 没装 electron */ }
   }
   if (!cmd) return 'unavailable';
-  spawn(cmd, [...args, '--background'], { detached: true, stdio: 'ignore' }).unref();
+  // 安装版的 crux 是用 ELECTRON_RUN_AS_NODE 跑的，拉起桌面版时要去掉，否则它也会当成 Node 运行
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  spawn(cmd, [...args, '--background'], { detached: true, stdio: 'ignore', env }).unref();
   return 'started';
 }

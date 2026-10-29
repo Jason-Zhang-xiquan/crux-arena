@@ -135,6 +135,21 @@ C2 ✗ ← #A6 CODEX 认输 ← #A4
 
 ## 🚀 快速开始
 
+### 用起来（Windows）
+
+1. 到 [Releases](https://github.com/Jason-Zhang-xiquan/crux-arena/releases) 下载 `CruxArena-Setup-<版本>.exe` 安装。安装包没有代码签名，Windows 会提示"未知发布者"，点"更多信息 → 仍要运行"。
+2. 准备至少一条模型通道：
+   - 登录 Cursor Agent：`cursor-agent login`。
+   - 或者登录 Claude Code：`claude auth login`。
+   - 或者在 `channels.json` 里接 OpenRouter / Ollama（见 [docs/channels.md](docs/channels.md)）。
+   一条通道都没有时会自动用演示模式。
+3. 按快捷键（默认 `Ctrl+Alt+Space`）提问开打。
+4. 想从 agent 里拉起对局：在桌面版 设置 → AGENT 里点"安装 crux 命令"，然后在终端运行 `crux setup`，给 Claude Code 装上 skill。
+
+> macOS / Linux：真实模型的通道查找已经支持，但还没有安装包，先按下面的"从源码运行"使用。
+
+### 从源码运行
+
 需要 Node ≥ 23.6（直接运行 TypeScript，无构建步骤）。
 
 ```bash
@@ -146,7 +161,8 @@ npm install
 ```bash
 npm run desktop            # 桌面版：托盘常驻，快捷键唤出
 npm run desktop:selftest   # 自测：输入框 → 设置 → 开打 → 回放，全程截图
-npm run desktop:dist       # 打 Windows 安装包，输出到 packages/desktop/release/
+npm run desktop:dist       # 打 Windows 安装包（含打包好的 crux 命令），输出到 packages/desktop/release/
+npm run build -w @crux/cli # 只打包 CLI：packages/cli/dist 是可以发布的 npm 包 crux-arena
 ```
 
 ```bash

@@ -17,6 +17,7 @@ import type { MascotData } from '@crux/cli/mascots';
 import { loadCustomConfig } from '@crux/channels';
 import { FIGHT_DEFAULTS, customConfigFile, desktopLockFile } from '@crux/cli/settings';
 import type { FightDefaults } from '@crux/cli/settings';
+import { installShim, shimPlan, shimStatus } from './cli-shim.ts';
 import { crabPng } from './icon.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -63,8 +64,18 @@ const defaultMatchesDir = () => path.join(app.getPath('userData'), 'matches');
 const matchesDir = () => settings.matchesDir || defaultMatchesDir();
 const display = (acc: string) => acc.replace('CommandOrControl', process.platform === 'darwin' ? 'Cmd' : 'Ctrl');
 
+let firstRun = false;
 async function loadSettings() {
-  try { settings = { ...DEFAULTS, ...JSON.parse(await readFile(settingsFile(), 'utf8')) }; } catch { settings = { ...DEFAULTS }; }
+  try { settings = { ...DEFAULTS, ...JSON.parse(await readFile(settingsFile(), 'utf8')) }; } catch { settings = { ...DEFAULTS }; firstRun = true; }
+}
+
+/** 第一次打开：探测本机通道。一条都没有就先用演示模式；有的话把默认阵容换成真正能上场的人 */
+async function onboard() {
+  const avail = Object.keys(await availableFighters(settings.effort));
+  if (!avail.length) { await saveSettings({ brains: 'demo' }); return; }
+  const team = settings.team.filter(id => avail.includes(id));
+  for (const id of avail) if (team.length < 4 && !team.includes(id)) team.push(id);
+  await saveSettings({ brains: 'real', team });
 }
 async function saveSettings(patch: Partial<Settings>) {
   settings = { ...settings, ...patch };
@@ -255,7 +266,9 @@ async function scanExternal() {
     let meta: MatchMeta;
     try { meta = JSON.parse(await readFile(path.join(dir, 'meta.json'), 'utf8')); } catch { continue; }   // 没有 meta：旧存档，或刚建好文件夹
     seen.add(id);
-    if (meta.source !== 'cli' || meta.display === 'none' || !alive(meta.pid)) continue;
+    if (meta.source !== 'cli' || meta.display === 'none') continue;
+    // 跑比赛的进程已经结束：只有刚打完的（5 分钟内开始的）才显示，比如桌面版是被这场对局拉起来的、启动时比赛已经打完了
+    if (!alive(meta.pid) && !(Date.now() - Date.parse(meta.startedAt) < 5 * 60_000 && (await readFile(path.join(dir, 'events.jsonl'), 'utf8').catch(() => '')).includes('"match_ended"'))) continue;
     follow({ id, dir, meta, events: [], state: initialState(), ended: false, subs: new Set() });
   }
 }
@@ -373,6 +386,7 @@ async function replayLatest() {
 
 /* ---------- IPC ---------- */
 function registerIpc() {
+  ipcMain.handle('brains:demo', () => saveSettings({ brains: 'demo' }));
   ipcMain.handle('settings:get', () => ({ ...settings, hotkeyActive: hotkey, hotkeyError, defaultMatchesDir: defaultMatchesDir(), version: app.getVersion(), roster: FIGHTER_IDS }));
   ipcMain.handle('settings:save', async (_e, patch: Partial<Settings>) => {
     const clean: Partial<Settings> = {};
@@ -427,6 +441,10 @@ function registerIpc() {
     if (x.ended) replay(x.dir); else showExternalArena(x);
   });
   ipcMain.on('mini:close', () => miniWin?.hide());
+  // 安装包自带的 crux 命令：查看状态 / 写启动脚本
+  const plan = () => shimPlan({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appDir: path.resolve(here, '..') });
+  ipcMain.handle('cli:status', () => shimStatus(plan()));
+  ipcMain.handle('cli:install', () => installShim(process.execPath, plan()));
   ipcMain.on('custom:get', e => { e.returnValue = { mascots: custom.mascots, fighters: custom.fighters }; });
 }
 
@@ -525,6 +543,7 @@ async function replayFromArgs(dir: string) {
 /* ---------- 启动 ---------- */
 app.setName('Crux Arena');
 if (SELFTEST) app.setPath('userData', path.join(app.getPath('temp'), 'crux-selftest-userdata'));
+else if (process.env.CRUX_USER_DATA) app.setPath('userData', process.env.CRUX_USER_DATA);   // 测试用：模拟一个全新用户
 process.env.CRUX_HOME = app.getPath('userData');   // CLI 那套工具（通道配置、形象目录、锁文件）和桌面版用同一个数据目录
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -552,5 +571,6 @@ else {
     if (SELFTEST) await selftest();
     else if (REPLAY_DIR) await replayFromArgs(REPLAY_DIR);
     else if (!BACKGROUND) showLauncher();
+    if (firstRun && !SELFTEST) onboard().then(() => launcher?.webContents.reload()).catch(err => console.error('首次探测失败', err));
   });
 }
