@@ -9,7 +9,8 @@
   "dependencies": {
     "@crux/engine": "0.0.0",
     "@crux/workspace": "0.0.0",
-    "@crux/channels": "0.0.0"
+    "@crux/channels": "0.0.0",
+    "zod": "4.6.7"
   },
   "exports": {
     "./match": "./src/match.ts",

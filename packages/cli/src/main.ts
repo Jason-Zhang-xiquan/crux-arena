@@ -12,10 +12,11 @@ import { detachJob, ensureDesktop, listMatches, readMatch, resolveMatch, summari
 import { blankMascot, builtinIds, checkMascot, exportBuiltin, formatMascot, loadUserMascots, mascotsDir, previewPng } from './mascots.ts';
 import type { MascotData } from './mascots.ts';
 import { newMatchId, runLocalMatch } from './match.ts';
-import { autoLens, availableFighters, probeChannels, realBrains } from './real.ts';
+import { autoLens, availableFighters, probeChannels, realBrains, roleModels } from './real.ts';
+import { callCost, estimatePerItem, importGpqa, parseItems, readRows, reportEval, runEval } from './eval.ts';
 import { extractJson } from '@crux/channels';
 import type { Display, Effort } from './settings.ts';
-import { customConfigFile, loadFightDefaults, matchesRoot, normalizeFighter } from './settings.ts';
+import { customConfigFile, dataDir, loadFightDefaults, matchesRoot, normalizeFighter } from './settings.ts';
 
 const HELP = `crux · AI 竞技场命令行
 
@@ -30,6 +31,12 @@ const HELP = `crux · AI 竞技场命令行
   crux list                                  最近的对局和状态
   crux channels                              本机能上场的选手和实际模型（只读探测，不耗额度）
   crux setup                                 安装 Claude Code skill（其他 agent 见 docs/agents.md）
+
+评测（单模型 vs 多数投票 vs 竞技场，见 docs/eval.md）：
+  crux eval run <题库.jsonl> [--team …] [--rounds 1] [--limit N] [--out 目录] [--yes]
+                                             先报待跑题数和预计 token；加 --yes 才开打，中断后重跑会接着跑
+  crux eval report <目录>                    零 token 重新判分，写出 report.md
+  crux eval import-gpqa <gpqa_diamond.csv> [--out 题库.jsonl] [--limit N]
 
 自定义：
   crux mascot list | export <编号> | new <编号> [--name 名字] [--color #hex] | check [编号] | preview <编号> | reset <编号>
@@ -97,6 +104,8 @@ async function main(argv: string[]) {
       scale: { type: 'string' },
       force: { type: 'boolean', default: false },
       model: { type: 'string' },
+      limit: { type: 'string' },
+      yes: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
@@ -155,6 +164,58 @@ async function main(argv: string[]) {
     await runJob(job, !values.quiet);
     const m = await readMatch(matchDir);
     console.log(values.json ? JSON.stringify({ matchId: m.id, matchDir, status: m.status, final: m.events.find(e => e.type === 'final') }) : summarize(m));
+    return;
+  }
+
+  if (cmd === 'eval') {
+    const [sub, target] = rest;
+    if (sub === 'import-gpqa') {
+      if (!target) throw new Error('用法：crux eval import-gpqa <gpqa_diamond.csv> [--out 题库.jsonl] [--limit N]');
+      const items = importGpqa(await readFile(target, 'utf8')).slice(0, values.limit ? Number(values.limit) : undefined);
+      const out = path.resolve(values.out ?? target.replace(/\.csv$/i, '') + '.jsonl');
+      await writeFile(out, items.map(i => JSON.stringify(i)).join('\n') + '\n');
+      console.log(`已写出 ${out}（${items.length} 题）。GPQA 要求不要公开题目：这个文件别提交、别上传。`);
+      return;
+    }
+    if (sub === 'report') {
+      if (!target) throw new Error('用法：crux eval report <评测目录>');
+      const r = await reportEval(path.resolve(target));
+      console.log(r.markdown + `\n已写出 ${r.file}`);
+      return;
+    }
+    if (sub !== 'run' || !target) throw new Error('用法：crux eval run <题库.jsonl> | report <目录> | import-gpqa <csv>（crux --help 看参数）');
+    const d = await loadFightDefaults();
+    const items = parseItems(await readFile(target, 'utf8'), target);
+    const effort = (values.effort ?? d.effort) as Effort;
+    const avail = await availableFighters(effort);
+    const team = [...new Set((values.team ? values.team.split(',') : d.team).map(n => normalizeFighter(n, Object.keys(avail))).filter(Boolean))];
+    if (team.length < 2 || team.length > 8) throw new Error('--team 需要 2–8 名选手');
+    const missing = team.filter(id => !avail[id]);
+    if (missing.length) throw new Error(`这些选手在本机没有通道：${missing.join('、')}。能上场的：${Object.keys(avail).join('、') || '无'}`);
+    const rounds = Number(values.rounds ?? 1), budget = Number(values.budget ?? d.budget);
+    const out = path.resolve(values.out ?? path.join(dataDir(), 'evals', path.basename(target).replace(/\.[^.]+$/, '')));
+    const rows = await readRows(out);
+    const left = items.filter(i => !['done', 'forfeit'].includes(rows.get(i.id)?.status ?? '')).length;
+    const n = Math.min(left, values.limit ? Number(values.limit) : Infinity);
+    const roles = await roleModels();
+    const est = estimatePerItem(team.map(id => callCost(avail[id])), callCost(roles.judge ?? 'cursor/'), callCost(roles.chair ?? 'cursor/'), rounds);
+    const wan = (t: number) => `${(t / 10_000).toFixed(t < 100_000 ? 1 : 0)} 万`;
+    console.log([
+      `评测：${path.basename(target)} · 待跑 ${n} 题（共 ${items.length} 题，已完成 ${items.length - left}）`,
+      `选手：${team.map(id => `${id}（${avail[id]}）`).join('、')}`,
+      `裁判 / 主席：${roles.judge ?? '无'} / ${roles.chair ?? '无'} · 档位 ${effort} · 最多 ${rounds} 回合 · 立场视角关闭`,
+      `预计：每题约 ${wan(est.agreed)}（盲答一致）到 ${wan(est.contested)}（打一回合），${n} 题约 ${wan(est.agreed * n)}–${wan(est.contested * n)} token；硬上限 ${n} × ${wan(budget)}`,
+      `存档：${out}`,
+    ].join('\n'));
+    if (!n) { console.log('没有要跑的题。看结果：crux eval report ' + JSON.stringify(out)); return; }
+    if (!values.yes) { console.log('\n会消耗你的会员额度。确认后加 --yes 开始；中途可以 Ctrl+C，已完成的题不会重跑。'); return; }
+    await runEval({
+      setFile: target, out, team, effort, rounds, budget, limit: n,
+      brains: ({ onCall, allowReads }) => realBrains({ effort, lenses: 'none', allowReads, onCall }),
+      log: s => console.error(s),
+    });
+    const r = await reportEval(out);
+    console.log(r.markdown + `\n已写出 ${r.file}`);
     return;
   }
 

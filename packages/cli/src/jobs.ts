@@ -11,7 +11,7 @@ import type { Display } from './settings.ts';
 import { desktopLockFile } from './settings.ts';
 
 export interface MatchMeta {
-  source: 'cli' | 'desktop';
+  source: 'cli' | 'desktop' | 'eval';
   display: Display;
   pid: number;
   question: string;

@@ -583,7 +583,7 @@ Engine (TS)  ──events (SSE)──▶  Arena UI (PixiJS v8 + React 叠加层)
 - [ ] Provider 适配与 LLM 大脑：移到 Phase 4（最后做）
 - [ ] `git_log` / `git_diff` 只读工具：需先关掉仓库自带配置可能触发的外部命令（diff 驱动、textconv、fsmonitor），再开放
 - [ ] 子目录里的 `.gitignore`（目前只读根目录的）
-- [ ] Eval：单模型 vs 多数投票 vs Arena，准确率 + 成本（GPQA 子集 + 30 道真实难题）
+- [ ] Eval：单模型 vs 多数投票 vs Arena，准确率 + 成本（GPQA 子集 + 埋 bug 的代码审查）。`crux eval` 已完成（同一场比赛的盲答就是单模型和投票的对照组，零额外 token；见 docs/eval.md）；下一步先跑约 60 万 token 的试点
 - 门槛：Arena 不比投票强就先调机制，不做画面
 
 ### Phase 1 — 桌面版（先不接模型）

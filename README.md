@@ -227,7 +227,7 @@ PLAN.md        完整方案：调研、机制、日志规范、视觉、路线�
 - [x] 桌面版回放、设置页（自定义快捷键）、Windows 安装包
 - [ ] 安装包代码签名、自动更新、macOS 版
 - [x] **自定义通道与形象**：`channels.json` 接 OpenAI 兼容 API（OpenRouter / Ollama / 各家平台）、命令行、脚本；裁判和主席也能换；24×20 像素形象可改可画
-- [ ] 评测：单模型 vs 多数投票 vs 竞技场
+- [ ] 评测：单模型 vs 多数投票 vs 竞技场（`crux eval` 已就绪，见 [docs/eval.md](docs/eval.md)；还没跑真实模型）
 - [ ] **Phase 2**：精修精灵与音效、攻擂 / 淘汰赛 / 速决 / 讨伐 BOSS、跨比赛"说服力"排行榜
 - [x] Claude Code skill：拉起对局、接通道、画形象（`crux setup`）
 - [ ] **Phase 3**：`npx crux-arena` 一行启动、在线回放站、MCP 插件

@@ -94,6 +94,13 @@ export async function availableFighters(effort: Effort = 'low'): Promise<Record<
   return out;
 }
 
+/** 裁判 / 主席实际会用的通道和模型（估算花费用） */
+export async function roleModels(): Promise<{ judge?: string; chair?: string }> {
+  const p = await probeChannels();
+  const show = (s?: Seat) => s && `${s.channel.id}/${s.model}`;
+  return { judge: show(roleSeat(p, 'judge', 'composer-2.5', 'low')), chair: show(roleSeat(p, 'chair', 'composer-2.5', 'medium')) };
+}
+
 /** channels.json 里新加的选手（名字、颜色），桌面版用来显示还没画形象的新 AI */
 export async function customFighters(): Promise<Array<{ id: string; name: string; color?: string; maker?: string }>> {
   const p = await probeChannels();
