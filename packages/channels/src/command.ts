@@ -3,7 +3,7 @@
 // 每次调用有超时和输出大小上限；通道进程拿不到用户的文件夹，文件由我们的只读工具读取。
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { Channel, ChannelRequest, ChannelResult, Effort, ErrorKind } from './channel.ts';
@@ -50,7 +50,7 @@ export async function withSandbox<T>(fn: (dir: string) => Promise<T>): Promise<T
 }
 
 /** 环境变量白名单：只给命令行运行和登录所需的系统变量，不把宿主进程的密钥、会话凭据（如 CLAUDE_*、ANTHROPIC_*、各种 API key）传下去 */
-const ENV_KEEP = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|USERNAME|USER|LOGNAME|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|PROGRAMW6432|COMMONPROGRAMFILES|ALLUSERSPROFILE|PUBLIC|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|NUMBER_OF_PROCESSORS|LANG|LANGUAGE|LC_[A-Z_]+|TZ|SHELL|TERM|XDG_[A-Z_]+|HTTPS?_PROXY|NO_PROXY|ALL_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR)$/i;
+const ENV_KEEP = /^(PATH|PATHEXT|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|TEMP|TMP|TMPDIR|HOME|USERPROFILE|USERNAME|USER|LOGNAME|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|PROGRAMW6432|COMMONPROGRAMFILES|ALLUSERSPROFILE|PUBLIC|OS|PROCESSOR_ARCHITECTURE|PROCESSOR_IDENTIFIER|NUMBER_OF_PROCESSORS|LANG|LANGUAGE|LC_[A-Z_]+|TZ|SHELL|TERM|XDG_[A-Z_]+|HTTPS?_PROXY|NO_PROXY|ALL_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|CODEX_HOME)$/i;
 export function minimalEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => ENV_KEEP.test(k))), ...extra };
 }
@@ -193,6 +193,104 @@ export async function claudeCodeChannel(o: { concurrency?: number; timeoutMs?: n
       const u = j.usage ?? {};
       const cached = (u.cache_read_input_tokens ?? 0);
       return { ok: true, text: j.result, model: req.model, effortApplied: `--effort ${effort ?? '默认'}`, ms: r.ms, usage: { in: (u.input_tokens ?? 0) + cached + (u.cache_creation_input_tokens ?? 0), out: u.output_tokens ?? 0, cached, estimated: !j.usage } };
+    },
+  };
+}
+
+/* ---------------- Codex ---------------- */
+
+const CODEX_EFFORT: Record<Effort, string> = { off: 'low', low: 'low', medium: 'medium', high: 'high', max: 'max' };
+/** 问答用不上的工具和功能。关掉之后每次调用的固定开销从约 1.6 万 token 降到约 6 千；只关当前版本认识的（不认识的名字会直接报错） */
+const CODEX_OFF = ['apps', 'browser_use', 'computer_use', 'goals', 'multi_agent', 'plugins', 'image_generation', 'shell_tool', 'unified_exec', 'view_image', 'skill_search', 'tool_suggest', 'sleep_tool', 'hooks'];
+
+const codexHome = () => process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+const versionOf = (s: string) => s.match(/(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number);
+const newer = (a: number[], b: number[]) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+/** 编辑器插件（VS Code、Cursor 里的 OpenAI 插件）自带的 codex，按插件版本从新到旧 */
+function extensionCodex(): string[] {
+  const out: string[] = [];
+  for (const root of ['.vscode', '.vscode-insiders', '.cursor'].map(d => path.join(os.homedir(), d, 'extensions'))) {
+    if (!existsSync(root)) continue;
+    for (const d of readdirSync(root).filter(d => d.startsWith('openai.chatgpt-')).sort().reverse()) {
+      const bin = path.join(root, d, 'bin');
+      if (!existsSync(bin)) continue;
+      for (const plat of readdirSync(bin)) out.push(path.join(bin, plat, process.platform === 'win32' ? 'codex.exe' : 'codex'));
+    }
+  }
+  return out;
+}
+
+/** Codex 可执行文件：CODEX_PATH > PATH > 桌面版 > 编辑器插件。桌面版和插件各带一个，版本可能差很远，取版本最新的那个 */
+export async function findCodex(): Promise<string | undefined> {
+  if (process.env.CODEX_PATH && existsSync(process.env.CODEX_PATH)) return process.env.CODEX_PATH;
+  const candidates = [findOnPath(['codex']), ...extensionCodex()];
+  if (process.platform === 'win32') {
+    // 桌面版是商店应用，装在 WindowsApps 里（目录不让列举，只能问系统要安装位置）；%LOCALAPPDATA%\OpenAI\Codex\bin 里那个可能是很早的版本
+    const ps = path.join(process.env.SYSTEMROOT ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const r = await runProcess(ps, ['-NoProfile', '-NonInteractive', '-Command', '(Get-AppxPackage -Name OpenAI.Codex).InstallLocation'], { env: minimalEnv(), timeoutMs: 20_000 });
+    for (const dir of r.stdout.split(/\r?\n/).map(s => s.trim()).filter(Boolean)) candidates.push(path.join(dir, 'app', 'resources', 'codex.exe'));
+    candidates.push(path.join(process.env.LOCALAPPDATA ?? '', 'OpenAI', 'Codex', 'bin', 'codex.exe'));
+  } else {
+    candidates.push('/Applications/Codex.app/Contents/Resources/codex', path.join(os.homedir(), '.local', 'bin', 'codex'));
+  }
+  const found = [...new Set(candidates.filter((f): f is string => !!f && existsSync(f)))];
+  const versions = await Promise.all(found.map(async file => ({ file, v: versionOf((await runProcess(file, ['--version'], { env: minimalEnv(), timeoutMs: 20_000 })).stdout) })));
+  return versions.filter((x): x is { file: string; v: number[] } => !!x.v).sort((a, b) => newer(b.v, a.v))[0]?.file;
+}
+
+/** `codex features list` 的输出 → 这个版本认识的功能名 */
+export const codexFeatures = (list: string) => new Set(list.split(/\r?\n/).map(l => l.match(/^([a-z0-9_]+)\s+\S/)?.[1]).filter((x): x is string => !!x));
+
+/** `codex exec --json` 的事件流 → 最后一条回答、用量、错误 */
+export function parseCodexEvents(stdout: string): { text?: string; usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number }; error?: string } {
+  let text: string | undefined, usage, error: string | undefined;
+  for (const line of stdout.split(/\r?\n/)) {
+    let e: { type?: string; item?: { type?: string; text?: string; message?: string }; usage?: typeof usage; message?: string; error?: { message?: string } };
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e.type === 'item.completed' && e.item?.type === 'agent_message' && typeof e.item.text === 'string') text = e.item.text;
+    else if (e.type === 'turn.completed') usage = e.usage;
+    else if (e.type === 'turn.failed' || e.type === 'error') error = e.error?.message ?? e.message ?? error;
+  }
+  return { text, usage, error };
+}
+
+/** 用户在 Codex 里设的默认模型（~/.codex/config.toml 的 model）；调用时不加载这份配置，只借用模型名 */
+async function codexDefaultModel(): Promise<string | undefined> {
+  try { return (await readFile(path.join(codexHome(), 'config.toml'), 'utf8')).match(/^\s*model\s*=\s*"([^"]+)"/m)?.[1]; } catch { return undefined; }
+}
+
+export async function codexChannel(o: { concurrency?: number; timeoutMs?: number } = {}): Promise<Channel & { loggedIn: boolean; defaultModel?: string }> {
+  const exe = await findCodex();
+  if (!exe) throw new Error('没有找到 Codex（codex）');
+  const env = minimalEnv();
+  const [status, features, defaultModel] = await Promise.all([
+    withSandbox(dir => runProcess(exe, ['login', 'status'], { env, cwd: dir, timeoutMs: 30_000 })),
+    withSandbox(dir => runProcess(exe, ['features', 'list'], { env, cwd: dir, timeoutMs: 30_000 })),
+    codexDefaultModel(),
+  ]);
+  const loggedIn = status.code === 0 && /logged in/i.test(status.stdout + status.stderr);
+  const known = codexFeatures(features.stdout);
+  const off = CODEX_OFF.filter(f => known.has(f)).flatMap(f => ['--disable', f]);
+  return {
+    id: 'codex', concurrency: o.concurrency ?? 3, loggedIn, defaultModel,
+    async call(req: ChannelRequest): Promise<ChannelResult> {
+      const effort = CODEX_EFFORT[req.effort];
+      // 不加载用户配置（档位、MCP、插件都不带进来）、不存会话、只读沙箱、关掉命令行等工具：纯问答。
+      // 系统提示替换掉 Codex 自带的长提示（model_instructions_file），文件放在这次调用的空目录里
+      const r = await withSandbox(async dir => {
+        const sys = path.join(dir, 'system.md');
+        await writeFile(sys, req.system);
+        const args = ['exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '-s', 'read-only', '--json', '-C', dir,
+          '-m', req.model, '-c', `model_reasoning_effort="${effort}"`, '-c', `model_instructions_file=${JSON.stringify(sys)}`, '-c', 'web_search="disabled"', ...off, '-'];
+        return runProcess(exe, args, { env, cwd: dir, stdin: req.prompt, timeoutMs: req.timeoutMs ?? o.timeoutMs });
+      });
+      const bad = processFailure(r, req.model);
+      if (bad) return bad;
+      const ev = parseCodexEvents(r.stdout);
+      if (ev.text === undefined) { const msg = ev.error ?? ((r.stderr || r.stdout).trim() || `退出码 ${r.code}`); return fail(req.model, r.ms, classify(msg), msg); }
+      const u = ev.usage ?? {};
+      return { ok: true, text: ev.text, model: req.model, effortApplied: `reasoning ${effort}`, ms: r.ms, usage: { in: u.input_tokens ?? 0, out: u.output_tokens ?? 0, cached: u.cached_input_tokens ?? 0, estimated: !ev.usage } };
     },
   };
 }

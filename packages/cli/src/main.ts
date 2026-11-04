@@ -21,8 +21,9 @@ import { customConfigFile, dataDir, loadFightDefaults, matchesRoot, normalizeFig
 const HELP = `crux · AI 竞技场命令行
 
 开打（没写的参数用桌面版设置里的默认值）：
-  crux fight "问题" [--team claude,codex,gemini,deepseek] [--dir 文件夹] [--mode ffa|team]
+  crux fight "问题" [--team claude,codex] [--dir 文件夹] [--mode ffa|team]
        [--brains real|demo] [--effort low] [--rounds 2] [--budget 250000] [--lens auto|code|decision|none]
+                                    视角：auto = 3 人以内不分，人多时按问题分代码 / 决策视角
        [--display full|mini|none]   画面：完整竞技场 / 角落小窗 / 纯后台
        [--detach]                   后台开打，立刻返回比赛编号（给 agent 用）
        [--context 文件:起-止,…] [--out 存档目录] [--json]
@@ -133,7 +134,7 @@ async function main(argv: string[]) {
     const display = (values.display ?? d.agentDisplay) as Display;
     if (!['full', 'mini', 'none'].includes(display)) throw new Error('--display 只能是 full / mini / none');
     const dir = values.dir ? path.resolve(values.dir) : undefined;
-    const lens = (values.lens === 'auto' ? autoLens(question, dir) : values.lens) as Job['lens'];
+    const lens = (values.lens === 'auto' ? autoLens(question, dir, team.length) : values.lens) as Job['lens'];
     if (!['code', 'decision', 'none'].includes(lens)) throw new Error('--lens 只能是 auto / code / decision / none');
     const context = values.context?.split(',').filter(Boolean).map(s => {
       const m = s.match(/^(.+?):(\d+)-(\d+)$/);
@@ -330,7 +331,7 @@ async function main(argv: string[]) {
       // 验收：真实调用一次，要求按格式回 JSON；会消耗一点额度
       const ch = name && p.channels.get(name);
       if (!ch) throw new Error(`没有通道 ${name ?? ''}。现有：${[...p.channels.keys()].join('、') || '无'}`);
-      const model = values.model ?? Object.values(p.custom.fighters).find(f => f.channel === name)?.model ?? (name === 'cursor' ? 'composer-2.5' : '');
+      const model = values.model ?? Object.values(p.custom.fighters).find(f => f.channel === name)?.model ?? (name === 'cursor' ? 'composer-2.5' : name === 'codex' ? p.codexModel : '');
       if (!model) throw new Error('用 --model 指定要测的模型');
       const r = await ch.call({ task: 'draft', model, effort: (values.effort ?? 'low') as Effort, system: '你是接入测试。只输出一个 JSON 对象，不要代码块。', prompt: '输出 {"ok":true,"answer":"1+1 的结果（数字）"}' });
       if (!r.ok) { console.log(`✗ ${name} / ${r.model}：${r.error.kind} · ${r.error.message}`); process.exitCode = 1; return; }

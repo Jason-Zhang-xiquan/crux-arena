@@ -12,8 +12,8 @@
 }
 ```
 
-- **`fighters`**：写新编号就是加一个新 AI；写自带编号（如 `codex`）就是改它走哪条通道。没写的自带选手照旧走 Claude Code / Cursor。
-- **通道名**：除了自己定义的，也可以直接用内置的 `cursor`、`claude-code`。比如 `{ "channel": "cursor", "model": "composer-2.5" }` 就能让 Cursor 里的任何模型上场。
+- **`fighters`**：写新编号就是加一个新 AI；写自带编号（如 `codex`）就是改它走哪条通道。没写的自带选手照旧：claude 走 Claude Code，codex 走 Codex（用你在 Codex 里设的默认模型），其余走 Cursor；本机没有 Claude Code / Codex 时也退回 Cursor。
+- **通道名**：除了自己定义的，也可以直接用内置的 `cursor`、`claude-code`、`codex`。比如 `"codex": { "channel": "codex", "model": "gpt-6-astra" }` 就能换成 Codex 里的另一个模型，`{ "channel": "cursor", "model": "composer-2.5" }` 就能让 Cursor 里的任何模型上场。
 - **`roles`**：裁判和主席用什么。不写就用 Cursor 的 `composer-2.5`；没有 Cursor 的用户必须写。
 - **形象**：新选手要有样子，见 [mascots.md](mascots.md)。没画的话会用同色小史莱姆顶上。
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRecorder, fighterSpecs, runMatch } from '@crux/engine';
-import { LlmBrains, classify, cursorModelFor, extractJson, findOnPath, limit, minimalEnv, runProcess } from '../src/index.ts';
+import { LlmBrains, classify, codexFeatures, cursorModelFor, extractJson, findOnPath, limit, minimalEnv, parseCodexEvents, runProcess } from '../src/index.ts';
 import type { Channel, ChannelRequest, ChannelResult, Seat } from '../src/index.ts';
 
 test('档位映射：取最接近的一档，同样近时取低一档；没有档位变体就用原名', () => {
@@ -103,6 +103,52 @@ test('LLM 大脑：模拟通道打完整场；格式错误和限流会重试，�
   assert.ok(fin?.type === 'final' && fin.answer.includes('先做 A'));
 });
 
+test('主论点一致：先互评一轮；提出新分歧就进入交锋，交锋和主席都看得到完整回答；没有新分歧才算无分歧收敛', async () => {
+  for (const objects of [true, false]) {
+    const calls: ChannelRequest[] = [];
+    const ok = (json: unknown): ChannelResult => ({ ok: true, text: JSON.stringify(json), usage: { in: 100, out: 20, cached: 0, estimated: false }, model: 'mock', effortApplied: 'mock', ms: 1 });
+    const ch: Channel = {
+      id: 'mock', concurrency: 8,
+      async call(req) {
+        calls.push(req);
+        if (req.task === 'draft') return ok({ answer: `${req.model} 的完整回答：先做 A，因为……`, claim: { text: '先做 A', short: '先做 A', label: '推断' } });
+        if (req.task === 'crux') return ok({ merges: [{ from: 'C2', into: 'C1' }], clash: ['C1'], consensus: [], stances: {}, why: '都主张先做 A' });
+        if (req.task === 'review') {
+          return ok({ claims: objects && req.model === 'm-b' ? [{ text: 'A 要先做灰度，不能直接全量', short: '先灰度', label: '推断', detail: '全量上线回滚成本太高' }] : [] });
+        }
+        if (req.task === 'act') return ok({ actions: req.model === 'm-a' ? [{ kind: 'attack', target: 'C3', why: '灰度拖慢进度', steelman: '回滚成本高', detail: '用户量小，直接全量更快' }] : [] });
+        if (req.task === 'rule') return ok({ rulings: [...req.prompt.matchAll(/^- (A\d+) /gm)].map(m => ({ id: m[1], verdict: 'partial', text: '部分成立', evidenceRelevant: true })) });
+        return ok({ answer: '先做 A，小范围灰度', minority: [], userCruxes: [], confidence: 0.7 });
+      },
+    };
+    const fighters = fighterSpecs(['claude', 'codex']);
+    const seats: Record<string, Seat> = { claude: { channel: ch, model: 'm-a', effort: 'low' }, codex: { channel: ch, model: 'm-b', effort: 'low' } };
+    const rec = createRecorder();
+    const brains = new LlmBrains({ seats, judge: { channel: ch, model: 'judge', effort: 'low' }, chair: { channel: ch, model: 'chair', effort: 'medium' }, state: () => rec.state });
+    await runMatch({ question: '先做什么？', fighters, judge: 'j', chair: 'c', maxRounds: 1 }, brains, rec);
+
+    const review = rec.events.find(e => e.type === 'round_started' && e.phase === 'review');
+    assert.ok(review, '主论点一致时先互评');
+    assert.ok(calls.filter(r => r.task === 'review').every(r => r.prompt.includes('其他选手的完整回答') && r.prompt.includes('的完整回答：先做 A')), '互评时看得到对方的完整回答');
+    const conv = rec.events.find(e => e.type === 'converged');
+    const final = calls.find(r => r.task === 'final')!;
+    assert.ok(final.prompt.includes('m-a 的完整回答') && final.prompt.includes('m-b 的完整回答'), '主席看到每个人的完整回答');
+    if (objects) {
+      const added = rec.events.find(e => e.type === 'claim' && e.id === 'C3');
+      assert.ok(added?.type === 'claim' && added.actor === 'codex', '互评提出的新分歧成为论点');
+      const crux = rec.events.filter(e => e.type === 'crux').at(-1);
+      assert.deepEqual(crux?.type === 'crux' && crux.clash, ['C1', 'C3']);
+      const act = calls.find(r => r.task === 'act' && r.model === 'm-a')!;
+      assert.ok(act.prompt.includes('【互评补充】') && act.prompt.includes('全量上线回滚成本太高'), '交锋时看得到对方的互评理由');
+      assert.ok(rec.events.some(e => e.type === 'action' && e.round === 2), '互评不占交锋回合数：--rounds 1 仍打满一回合交锋');
+      assert.ok(final.prompt.includes('【互评补充】'));
+    } else {
+      assert.equal(conv?.type === 'converged' && conv.reason, 'flawless');
+      assert.ok(!calls.some(r => r.task === 'act'), '没有新分歧就不交锋');
+    }
+  }
+});
+
 test('解析输出：JSON 后面还有带括号的说明文字也能取出', () => {
   assert.deepEqual(extractJson('{"a":{"b":"x}"}}\n备注：{见上}'), { a: { b: 'x}' } });
   assert.deepEqual(extractJson('先想一下 {草稿} 然后 {"ok":true}'), { ok: true });
@@ -157,4 +203,26 @@ test('PATH 查找：Windows 只认 .exe（.cmd 要经过 shell，不用），找
     assert.equal(findOnPath(['missing'], { PATH: dir }), undefined);
     if (process.platform === 'win32') assert.equal(findOnPath(['other'], { PATH: dir }), undefined);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('Codex：从 exec --json 的事件流取最后一条回答和用量；失败时取错误信息；只关这个版本认识的功能', () => {
+  const ok = [
+    '{"type":"thread.started","thread_id":"t1"}',
+    '{"type":"turn.started"}',
+    '{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"想一想"}}',
+    '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"{\\"ok\\":true}"}}',
+    '{"type":"turn.completed","usage":{"input_tokens":6187,"cached_input_tokens":3456,"output_tokens":13,"reasoning_output_tokens":0}}',
+  ].join('\n');
+  const r = parseCodexEvents(ok);
+  assert.equal(r.text, '{"ok":true}');
+  assert.deepEqual(r.usage, { input_tokens: 6187, cached_input_tokens: 3456, output_tokens: 13, reasoning_output_tokens: 0 });
+  assert.equal(r.error, undefined);
+
+  const bad = parseCodexEvents('Reading prompt from stdin...\n{"type":"turn.started"}\n{"type":"turn.failed","error":{"message":"You\'ve hit your usage limit."}}');
+  assert.equal(bad.text, undefined);
+  assert.equal(classify(bad.error ?? ''), 'quota');
+
+  const known = codexFeatures('apps                stable             true\nshell_tool          stable             true\nchronicle           under development  false\n');
+  assert.ok(known.has('apps') && known.has('shell_tool') && known.has('chronicle'));
+  assert.ok(!known.has('browser_use'));
 });

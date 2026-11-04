@@ -204,7 +204,7 @@ const H = {
   async round_started(e) {
     S.round = e.round;
     $('#round').textContent = e.round === 0 ? 'ROUND 0' : `ROUND ${e.round}`;
-    await banner(e.round === 0 ? 'ROUND 0' : `ROUND ${e.round}`, e.round === 0 ? '匿名盲答' : 'FIGHT!', 750);
+    await banner(e.round === 0 ? 'ROUND 0' : `ROUND ${e.round}`, e.round === 0 ? '匿名盲答' : e.phase === 'review' ? '互评' : 'FIGHT!', 750);
   },
   async tool_call(e) {
     S.reads++;
@@ -216,12 +216,12 @@ const H = {
   async claim(e) {
     setStatus(e.actor, '…'); await sleep(350); setStatus(e.actor, '');
     addCard(e); addTokens(e.tokens);
-    logLine({ id: e.id, who: e.actor, round: 0, tag: '立', tagc: 'clm', why: e.short, res: `[${LABEL[e.label]}]` });
+    logLine({ id: e.id, who: e.actor, round: S.round, tag: S.round ? '补' : '立', tagc: 'clm', why: e.short, res: `[${LABEL[e.label]}]` });
     await say(e.actor, `立 ${e.id}`, e.text); await sleep(450);
   },
   async second(e) {
     const c = S.claims[e.target]; if (c && !c.supporters.includes(e.actor)) { c.supporters.push(e.actor); renderSup(c); }
-    logLine({ who: e.actor, round: 0, tag: '附', tagc: 'clm', tgt: e.target, why: e.why });
+    logLine({ who: e.actor, round: S.round, tag: '附', tagc: 'clm', tgt: e.target, why: e.why });
     setStatus(e.actor, `附议 ${e.target}`); await sleep(600); setStatus(e.actor, '');
   },
   async crux(e) {
@@ -231,7 +231,7 @@ const H = {
     e.clash.forEach(id => S.claims[id]?.el.classList.add('clash'));
     if (e.consensus.length) { const cs = $('#consensus'); cs.textContent = `共识：${e.consensus.join('；')}`; cs.style.display = 'block'; cs.style.transform = 'translateX(-50%)'; }
     addTokens(e.tokens);
-    logLine({ who: 'judge', name: 'JUDGE', color: '#b8a6ff', round: 0, tag: '裁', tagc: 'jdg', why: `分歧 ${e.clash.join('/')}${e.merges.length ? ` · 合并 ${e.merges.map(m => `${m.from}→${m.into}`).join(' ')}` : ''}`, res: `${e.consensus.length} 共识`, resc: 'ok' });
+    logLine({ who: 'judge', name: 'JUDGE', color: '#b8a6ff', round: S.round, tag: '裁', tagc: 'jdg', why: `分歧 ${e.clash.join('/')}${e.merges.length ? ` · 合并 ${e.merges.map(m => `${m.from}→${m.into}`).join(' ')}` : ''}`, res: `${e.consensus.length} 共识`, resc: 'ok' });
     await say(null, '裁判', e.why); await sleep(900);
     e.clash.forEach(id => S.claims[id]?.el.classList.remove('clash'));
   },

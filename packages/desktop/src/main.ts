@@ -228,7 +228,7 @@ async function startFight(p: FightPayload): Promise<{ ok: true } | { ok: false; 
     question, team, mode, dir: dir || undefined, outDir: matchesDir(), onEvent: out.event,
     maxRounds: settings.rounds, budget: settings.budget,
     meta: { source: 'desktop', display: 'full', pid: process.pid, question, team, startedAt: new Date().toISOString() },
-    ...(real ? { brains: realBrains({ effort: settings.effort, lenses: autoLens(question, dir || undefined) }) } : {}),
+    ...(real ? { brains: realBrains({ effort: settings.effort, lenses: autoLens(question, dir || undefined, team.length) }) } : {}),
   })
     .then(r => { lastMatchDir = r.matchDir; out.done({ battleLog: r.battleLog, matchDir: r.matchDir }); })
     .catch(err => { console.error(err); out.done({ error: String(err?.message ?? err) }); });

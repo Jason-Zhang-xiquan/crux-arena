@@ -46,11 +46,11 @@ crux channels        # 看本机能上场哪些选手（只读探测，不耗额
 
 | 参数 | 说明 | 默认（桌面版设置里可改） |
 |---|---|---|
-| `--team` | 选手编号，逗号分隔；认识 gpt / openai / google 等别名 | claude,codex,gemini,deepseek |
+| `--team` | 选手编号，逗号分隔；认识 gpt / openai / google 等别名 | claude,codex |
 | `--dir` | 只读文件夹；选手可以请求读具体文件，引擎核对引用的原文 | 不读文件 |
 | `--display` | `full` 完整竞技场 / `mini` 角落小窗 / `none` 纯后台 | mini |
 | `--rounds` / `--budget` / `--effort` | 回合上限 / 单场 token 预算 / 推理档位 | 2 / 250000 / low |
-| `--lens` | 立场视角：`code`（代码审查）/ `decision`（决策）/ `none`；`auto` 按问题判断 | auto |
+| `--lens` | 立场视角：`code`（代码审查）/ `decision`（决策）/ `none`；`auto` 是 3 人以内不分，人多时按问题判断 | auto |
 | `--detach` | 后台开打，立刻返回比赛编号 | 前台跑完再返回 |
 
 `crux result latest`、`crux list` 查看最近的对局；每场存档里有 `events.jsonl`、`battle-log.md`、`calls.jsonl`（每次模型调用的提示词、原始输出、用量）和 `runner.log`。

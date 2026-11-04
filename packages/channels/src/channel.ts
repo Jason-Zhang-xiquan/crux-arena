@@ -2,7 +2,7 @@
 // 引擎和大脑不关心背后是会员命令行、API 还是用户自己写的脚本；错误只有固定几类，对应 §6.5 的处理规则。
 
 export type Effort = 'off' | 'low' | 'medium' | 'high' | 'max';
-export type Task = 'draft' | 'act' | 'crux' | 'rule' | 'final';
+export type Task = 'draft' | 'review' | 'act' | 'crux' | 'rule' | 'final';
 export type ErrorKind = 'rate_limit' | 'quota' | 'unavailable' | 'context_length' | 'refusal' | 'auth' | 'bad_output';
 
 export interface ChannelRequest {

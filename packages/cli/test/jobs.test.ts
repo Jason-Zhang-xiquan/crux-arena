@@ -40,7 +40,8 @@ test('选手别名与视角自动判断', () => {
   assert.equal(normalizeFighter('GPT'), 'codex');
   assert.equal(normalizeFighter(' Google '), 'gemini');
   assert.equal(normalizeFighter('deepseek'), 'deepseek');
-  assert.equal(autoLens('这套代码有哪些 bug', '/repo'), 'code');
-  assert.equal(autoLens('这套代码有哪些 bug'), 'decision');
-  assert.equal(autoLens('下一步该做什么', '/repo'), 'decision');
+  assert.equal(autoLens('这套代码有哪些 bug', '/repo', 4), 'code');
+  assert.equal(autoLens('这套代码有哪些 bug', undefined, 4), 'decision');
+  assert.equal(autoLens('下一步该做什么', '/repo', 4), 'decision');
+  assert.equal(autoLens('这套代码有哪些 bug', '/repo', 2), 'none');            // 3 人以内不分视角
 });

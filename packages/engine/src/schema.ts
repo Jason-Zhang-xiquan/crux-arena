@@ -49,7 +49,8 @@ export const MatchStarted = z.object({
   workspace: z.object({ root: z.string() }).optional(),
 });
 
-export const RoundStarted = z.object({ ...base, type: z.literal('round_started'), round: z.number().int().nonnegative() });
+// phase review：盲答的主论点一致时，先互评一轮（看彼此的完整回答，提出不同意的地方或遗漏），不算进交锋回合数
+export const RoundStarted = z.object({ ...base, type: z.literal('round_started'), round: z.number().int().nonnegative(), phase: z.literal('review').optional() });
 
 export const ClaimMade = z.object({
   ...base,

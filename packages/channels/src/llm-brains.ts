@@ -2,9 +2,9 @@
 // 每次调用（含失败和重试）都交给 onCall 记录：提示词、原始输出、模型、档位映射、用量、耗时。
 import { z } from 'zod';
 import { aliases, renderBoard } from '@crux/engine';
-import type { ActOut, BoardView, Brains, CruxOut, DraftOut, Evidence, FighterSpec, FinalOut, MatchState, RuleInput, RulingOut, Tokens } from '@crux/engine';
+import type { ActOut, BoardView, Brains, CruxOut, DraftOut, Evidence, FighterSpec, FinalOut, MatchState, ReviewOut, RuleInput, RulingOut, Tokens } from '@crux/engine';
 import type { Channel, ChannelResult, Effort, ErrorKind, Task } from './channel.ts';
-import { SYSTEM_CHAIR, SYSTEM_FIGHTER, SYSTEM_JUDGE, actPrompt, cruxPrompt, draftPrompt, finalPrompt, roundRulePrompt, rulePrompt } from './prompts.ts';
+import { SYSTEM_CHAIR, SYSTEM_FIGHTER, SYSTEM_JUDGE, actPrompt, cruxPrompt, draftPrompt, finalPrompt, reviewPrompt, roundRulePrompt, rulePrompt } from './prompts.ts';
 
 export interface Seat { channel: Channel; model: string; effort: Effort }
 
@@ -54,6 +54,9 @@ const DraftJson = z.object({
   answer: str.optional(),
   claim: z.object({ text: z.string().min(1), short: z.string().min(1), label: label.catch('inference') }).nullish(),
 }).refine(v => v.claim || v.need?.length, '需要 claim（或者先用 need 请求文件）');
+const ReviewJson = z.object({
+  claims: z.array(z.object({ text: z.string().min(1), short: z.string().min(1), label: label.catch('inference'), detail: z.string().nullish() })).max(4),
+});
 const ActJson = z.object({
   actions: z.array(z.object({
     kind: z.enum(['attack', 'defend', 'concede', 'shift']),
@@ -103,7 +106,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export class LlmBrains implements Brains {
   private n = 0;
-  private answers = new Map<string, string>();   // 选手编号 → 盲答全文（主席综合时用，匿名化后给出）
+  private answers = new Map<string, string>();   // 选手编号 → 盲答全文（含互评补充；交锋时给对手看，主席综合时用，都匿名化）
   private extra = new Map<string, string>();     // 选手编号 → 他自己请求读过的原文（交锋时继续给他）
   private o: LlmBrainsOptions;
   constructor(o: LlmBrainsOptions) { this.o = { ...o }; }
@@ -166,12 +169,34 @@ export class LlmBrains implements Brains {
     return { answer: value.answer ?? '', claims: [value.claim], tokens };
   }
 
+  /** 给某名选手看的其他人的完整回答：4 人以内全给；人多时只给仍在争议中的论点的作者，控制上下文 */
+  private peers(f: FighterSpec) {
+    const s = this.o.state();
+    const alias = aliases(s);
+    const fighters = s.start?.fighters ?? [];
+    const clash = new Set(s.crux?.clash ?? []);
+    const owners = new Set(Object.values(s.claims).filter(c => c.status === 'alive' && clash.has(c.id)).map(c => c.owner));
+    return fighters
+      .filter(x => x.id !== f.id && this.answers.get(x.id) && (fighters.length <= 4 || owners.has(x.id)))
+      .map(x => ({ alias: alias.get(x.id) ?? x.id, answer: this.answers.get(x.id)! }));
+  }
+
+  async review(f: FighterSpec, view: BoardView): Promise<ReviewOut> {
+    const prompt = reviewPrompt({ board: renderBoard(view), context: this.o.contextInAct ? this.o.context : undefined, extra: this.extra.get(f.id), ownAnswer: this.answers.get(f.id), peers: this.peers(f) });
+    const { value, tokens } = await this.ask(f.id, this.seat(f.id), 'review', SYSTEM_FIGHTER, prompt, ReviewJson);
+    const claims = (value?.claims ?? []).slice(0, 2);
+    // 互评的展开说明并入他的完整回答：交锋时对手看得到，最后主席也看得到
+    const notes = claims.filter(c => c.detail).map(c => `- ${c.text}：${c.detail}`);
+    if (notes.length) this.answers.set(f.id, `${this.answers.get(f.id) ?? ''}\n\n【互评补充】\n${notes.join('\n')}`);
+    return { claims: claims.map(c => ({ text: c.text, short: c.short, label: c.label })), tokens };
+  }
+
   async act(f: FighterSpec, view: BoardView, feedback?: string[]): Promise<ActOut> {
     const s = this.o.state();
     const alias = aliases(s);
     const me = s.start?.fighters.find(x => x.id === f.id);
     const teammates = me?.team ? s.start!.fighters.filter(x => x.team === me.team && x.id !== f.id).map(x => alias.get(x.id) ?? x.id) : undefined;
-    const prompt = actPrompt({ board: renderBoard(view), context: this.o.contextInAct ? this.o.context : undefined, extra: this.extra.get(f.id), ownAnswer: this.answers.get(f.id), teammates, feedback });
+    const prompt = actPrompt({ board: renderBoard(view), context: this.o.contextInAct ? this.o.context : undefined, extra: this.extra.get(f.id), ownAnswer: this.answers.get(f.id), peers: this.peers(f), teammates, feedback });
     const { value, tokens } = await this.ask(f.id, this.seat(f.id), 'act', SYSTEM_FIGHTER, prompt, ActJson);
     const actions = (value?.actions ?? []).map(a => ({
       kind: a.kind, target: a.target, why: a.why,
@@ -244,9 +269,13 @@ export class LlmBrains implements Brains {
     for (const id of s.order) {
       const c = s.claims[id];
       if (!c || c.status === 'merged') continue;
-      lines.push(`- ${id} [${c.status === 'ko' ? '出局' : `${c.hp}HP`}] 支持者 ${c.supporters.map(x => alias.get(x)).join(',')}：${c.text}`);
-      const ans = this.answers.get(c.owner);
-      if (ans && c.status === 'alive') lines.push(`  作者盲答：${ans}`);
+      lines.push(`- ${id}（${alias.get(c.owner)}）[${c.status === 'ko' ? '出局' : `${c.hp}HP`}] 支持者 ${c.supporters.map(x => alias.get(x)).join(',')}：${c.text}`);
+    }
+    // 每个人的完整回答都给主席，包括论点被打掉的人：被打掉的是主论点，回答里其他正确的部分仍可以吸收
+    const full = (s.start?.fighters ?? []).filter(f => this.answers.get(f.id));
+    if (full.length) {
+      lines.push('各选手的完整回答（含互评补充）：');
+      for (const f of full) lines.push(`【${alias.get(f.id)}】\n${this.answers.get(f.id)}`);
     }
     if (view.consensus.length) lines.push(`共识：${view.consensus.join('；')}`);
     const key = Object.values(s.actions).filter(a => a.ruling && a.ruling.verdict !== 'rejected');

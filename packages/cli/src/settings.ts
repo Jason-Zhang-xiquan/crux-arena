@@ -19,7 +19,7 @@ export interface FightDefaults {
 }
 
 export const FIGHT_DEFAULTS: FightDefaults = {
-  team: ['claude', 'codex', 'gemini', 'deepseek'], mode: 'ffa', brains: 'real', effort: 'low',
+  team: ['claude', 'codex'], mode: 'ffa', brains: 'real', effort: 'low',
   rounds: 2, budget: 250_000, agentDisplay: 'mini', matchesDir: '',
 };
 

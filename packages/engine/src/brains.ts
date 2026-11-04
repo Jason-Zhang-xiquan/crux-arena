@@ -68,4 +68,8 @@ export interface Brains {
   /** 可选：一回合的攻守攒到回合末尾一次判完（省调用；裁判也能把攻和守放在一起看）。顺序与输入一致 */
   ruleRound?(actions: RuleInput[], view: BoardView): Promise<{ rulings: Array<Omit<RulingOut, 'tokens'>>; tokens: Tokens }>;
   final(view: BoardView): Promise<FinalOut>;
+  /** 可选：主论点一致时的互评。看过其他人的完整回答后，提出不同意的地方或重要遗漏（每条成为一个新论点）；没有实质分歧就返回空 */
+  review?(fighter: FighterSpec, view: BoardView): Promise<ReviewOut>;
 }
+
+export interface ReviewOut { claims: Array<{ text: string; short: string; label: Label }>; tokens: Tokens }

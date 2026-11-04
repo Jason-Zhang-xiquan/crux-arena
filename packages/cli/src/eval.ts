@@ -340,4 +340,4 @@ export function estimatePerItem(fighterCost: number[], judgeCost: number, chairC
   return { agreed, contested: agreed + (rounds > 0 ? Math.round(drafts * 0.8) + judgeCost : 0) };
 }
 /** 每次调用的大致 token：Cursor 每次都带一段很长的固定提示 */
-export const callCost = (display: string) => (display.startsWith('cursor/') ? 12_000 : display.startsWith('claude-code/') ? 2_500 : 3_000);
+export const callCost = (display: string) => (display.startsWith('cursor/') ? 12_000 : display.startsWith('codex/') ? 6_000 : display.startsWith('claude-code/') ? 2_500 : 3_000);

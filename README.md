@@ -74,7 +74,9 @@ Crux Arena 把这件事变成一场比赛：
 flowchart LR
   Q[你的问题<br/>可附只读文件夹] --> R0[ROUND 0<br/>匿名盲答]
   R0 --> X[分歧提取<br/>共识 / 争议]
-  X -- 没有分歧 --> F[FLAWLESS<br/>直接出答案]
+  X -- 主论点一致 --> V[互评<br/>看彼此的完整回答]
+  V -- 没有实质分歧 --> F[FLAWLESS<br/>直接出答案]
+  V -- 提出新分歧 --> R
   X --> R[ROUND 1..3<br/>攻 · 守 · 让 · 改]
   R -- 立场收敛 / 预算用完 --> C[冠军答案<br/>+ 少数派 + 待你判断]
   R -- 还有分歧 --> R
@@ -168,7 +170,7 @@ npm run build -w @crux/cli # 只打包 CLI：packages/cli/dist 是可以发布�
 ```bash
 npm run crux -- fight "该不该拆微服务？" --team claude,doubao,kimi --mode team --dir .
 
-# 真实模型（本机已登录的 Cursor Agent / Claude Code；会消耗你的会员额度）
+# 真实模型（本机已登录的 Claude Code / Codex / Cursor Agent；会消耗你的会员额度）
 npm run crux -- fight "问题" --real --team claude,codex,grok,kimi --rounds 2 --budget 300000 --dir . --context PLAN.md:12-41
 node packages/desktop/scripts/record.ts <存档文件夹>      # 把回放录成视频（Windows，需要 ffmpeg）
 npm run demo               # 固定剧本演示赛（和网页原型同一场）
@@ -210,7 +212,7 @@ Cursor、Codex 等其他 agent：把 [docs/agents.md](docs/agents.md) 里的一�
 packages/
   engine/      事件 schema · 状态推导 · 引擎状态机 · 规则 · battle-log 生成器 · 演示大脑
   workspace/   只读文件夹工具（沙箱、屏蔽、预算、证据柜、审计）
-  channels/    模型通道（Cursor Agent、Claude Code、自定义：API / 命令行 / 脚本）+ LLM 大脑
+  channels/    模型通道（Claude Code、Codex、Cursor Agent、自定义：API / 命令行 / 脚本）+ LLM 大脑
   cli/         crux 命令行 + 本地开打（CLI 和桌面版共用）
   desktop/     Electron 桌面版：托盘、全局快捷键、输入框、任务栏上方的竞技场
   sprites/     13 个吉祥物的像素精灵（网页原型和桌面版共用）

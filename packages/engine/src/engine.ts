@@ -1,4 +1,4 @@
-// 比赛状态机：ROUND 0 盲答 → 分歧提取 → 交锋（≤ maxRounds）→ 收敛 → 冠军答案。
+// 比赛状态机：ROUND 0 盲答 → 分歧提取 →（主论点一致时）互评 → 交锋（≤ maxRounds）→ 收敛 → 冠军答案。
 // 引擎只产出事件；状态全部由 state.ts 从事件推导。
 import { randomUUID } from 'node:crypto';
 import type { ActionDraft, Brains, RuleInput } from './brains.ts';
@@ -122,11 +122,38 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
   // 第 1 回合的花费估算：每人一次出手 ≈ 盲答花费的中位数，加一次裁决 ≈ 分歧提取的花费（没有实测数据时用固定值）
   const perFighter = drafts.map(d => sumTokens(d.tokens)).sort((a, b) => a - b)[Math.floor(drafts.length / 2)] ?? 0;
   let lastRoundTokens = Math.max(fighters.length * ROUND_COST_PER_FIGHTER, perFighter * fighters.length + sumTokens(cx.tokens));
+
+  // 主论点一致：先互评一轮。一句话的主论点一致，不等于细节、风险和做法也一致；互评占一个回合号，不算进交锋回合数
+  let first = 1;
+  if (aliveClash(s).length <= 1 && brains.review && maxRounds >= 1 && s.tokens + lastRoundTokens <= budget * (1 - FINAL_RESERVE)) {
+    emit({ type: 'round_started', round: 1, phase: 'review' });
+    const before = s.tokens;
+    const reviewers = fighters.filter(f => Object.values(s.claims).some(c => c.owner === f.id));
+    const reviews = await Promise.all(reviewers.map(f => brains.review!(f, boardView(s, f.id))));
+    const added: string[] = [];
+    reviews.forEach((r, i) => {
+      const f = reviewers[i];
+      if (!r.claims.length) { emit({ type: 'skip', round: 1, actor: f.id, reason: '互评：没有实质分歧', savedTokens: 0, tokens: r.tokens }); return; }
+      r.claims.slice(0, 2).forEach((c, j) => {
+        const id = `C${++claimNo}`;
+        added.push(id);
+        emit({ type: 'claim', id, actor: f.id, text: c.text, short: clampText(c.short, WHY_LIMIT).text, label: c.label, tokens: j === 0 ? r.tokens : ZERO });
+      });
+    });
+    if (added.length) {
+      const standing = Object.values(s.claims).filter(c => c.status === 'alive' && !added.includes(c.id)).map(c => c.id);
+      emit({ type: 'crux', clash: [...standing, ...added], consensus: s.crux?.consensus ?? [], merges: [], why: '互评提出了新的分歧', tokens: ZERO });
+    }
+    lastRoundTokens = Math.max(1, s.tokens - before);
+    first = 2;
+  }
+
+  const last = first + maxRounds - 1;
   if (aliveClash(s).length <= 1) {
-    emit({ type: 'converged', round: 0, reason: 'flawless', savedTokens: maxRounds * lastRoundTokens });
+    emit({ type: 'converged', round: s.round, reason: 'flawless', savedTokens: maxRounds * lastRoundTokens });
   } else {
     let actionNo = 0;
-    for (let round = 1; round <= maxRounds; round++) {
+    for (let round = first; round <= last; round++) {
       // 预算不够打完整一回合就不开新回合（按上一回合的实际花费估算），并给冠军答案留 15%
       if (s.tokens + lastRoundTokens > budget * (1 - FINAL_RESERVE)) break;
       emit({ type: 'round_started', round });
@@ -135,13 +162,13 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
       const pending: RuleInput[] = [];        // 批量裁决：回合末尾一起判
       const judged = (kind: string, verdict: string) => { if (kind === 'attack' && verdict !== 'rejected') progressed = true; };
 
-      // 稀疏化：第 2 回合起，和已出场选手立场完全相同的人轮空
+      // 稀疏化：交锋的第 2 回合起，和已出场选手立场完全相同的人轮空
       const active: FighterSpec[] = [];
       const stances = new Map<string, string>();
       const avgAct = Math.round(lastRoundTokens / fighters.length);
       for (const f of fighters) {
         const st = stanceOf(s, f.id).join(',');
-        if (round >= 2 && st && stances.has(st)) {
+        if (round > first && st && stances.has(st)) {
           emit({ type: 'skip', round, actor: f.id, reason: `立场与 ${nameOf(stances.get(st)!)} 重合，轮空`, savedTokens: avgAct });
           continue;
         }
@@ -211,10 +238,10 @@ export async function runMatch(cfg: MatchConfig, brains: Brains, rec: Recorder =
       lastRoundTokens = Math.max(1, s.tokens - before);
       if (s.tokens >= budget) break;
       if (aliveClash(s).length <= 1 || !progressed) {
-        emit({ type: 'converged', round, reason: 'settled', savedTokens: (maxRounds - round) * lastRoundTokens });
+        emit({ type: 'converged', round, reason: 'settled', savedTokens: (last - round) * lastRoundTokens });
         break;
       }
-      if (round === maxRounds) emit({ type: 'converged', round, reason: 'max_rounds', savedTokens: 0 });
+      if (round === last) emit({ type: 'converged', round, reason: 'max_rounds', savedTokens: 0 });
     }
     if (!s.converged) {
       emit({ type: 'flag', kind: 'budget', note: `已用 ${s.tokens} tokens，剩余预算（共 ${budget}）不够再打一回合，直接进入冠军答案` });

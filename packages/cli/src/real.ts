@@ -2,7 +2,7 @@
 // 没有通道的选手直接报错，不会偷偷换成别的模型冒充（PLAN §6.7）。
 import { appendFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { CustomConfig, LENSES, LlmBrains, claudeCodeChannel, createChannel, cursorChannel, cursorModelFor, limit, loadCustomConfig } from '@crux/channels';
+import { CustomConfig, LENSES, LlmBrains, claudeCodeChannel, codexChannel, createChannel, cursorChannel, cursorModelFor, limit, loadCustomConfig } from '@crux/channels';
 import type { CallRecord, Channel, Effort, LensSet, Seat } from '@crux/channels';
 import type { Evidence } from '@crux/engine';
 import type { BrainsFactory } from './match.ts';
@@ -20,6 +20,8 @@ export const CURSOR_ROSTER: Record<string, string> = {
   glm: 'glm-5.2',
 };
 export const CLAUDE_CODE_MODEL = 'claude-opus-5-5';
+/** 直连 Codex 时的模型：用户在 Codex 里设的默认模型，没设就用这个 */
+export const CODEX_MODEL = 'gpt-6.1-sol';
 
 export interface RealOptions {
   effort?: Effort;                   // 选手推理档位，默认 low（省 token）
@@ -33,24 +35,26 @@ export interface RealOptions {
   onCall?: (c: CallRecord) => void;
 }
 
-interface Probe { cursor?: Channel; models: Set<string>; claudeCode?: Channel; custom: CustomConfig; channels: Map<string, Channel>; configError?: string }
+interface Probe { cursor?: Channel; models: Set<string>; claudeCode?: Channel; codex?: Channel; codexModel: string; custom: CustomConfig; channels: Map<string, Channel>; configError?: string }
 
 /** 只读、不耗额度的通道探测 + 读用户的 channels.json；同一进程里只做一次（桌面版改了配置后调 resetProbe） */
 let probed: Promise<Probe> | undefined;
 export function probeChannels(): Promise<Probe> {
   probed ??= (async () => {
-    let cursor: Channel | undefined, models = new Set<string>(), claudeCode: Channel | undefined, configError: string | undefined;
+    let cursor: Channel | undefined, models = new Set<string>(), claudeCode: Channel | undefined, codex: Channel | undefined, codexModel = CODEX_MODEL, configError: string | undefined;
     let custom = CustomConfig.parse({});
     await Promise.all([
       (async () => { try { const c = await cursorChannel(); cursor = limit(c); models = c.models; } catch { /* 没装 Cursor Agent */ } })(),
       (async () => { try { const cc = await claudeCodeChannel(); if (cc.loggedIn) claudeCode = limit(cc); } catch { /* 没装 Claude Code */ } })(),
+      (async () => { try { const cx = await codexChannel(); if (cx.loggedIn) { codex = limit(cx); codexModel = cx.defaultModel ?? CODEX_MODEL; } } catch { /* 没装 Codex */ } })(),
       (async () => { try { custom = await loadCustomConfig(customConfigFile()); } catch (err) { configError = (err as Error).message; } })(),
     ]);
     const channels = new Map<string, Channel>();
     if (cursor) channels.set('cursor', cursor);
     if (claudeCode) channels.set('claude-code', claudeCode);
+    if (codex) channels.set('codex', codex);
     for (const [id, cfg] of Object.entries(custom.channels)) channels.set(id, limit(createChannel(id, cfg)));
-    return { cursor, models, claudeCode, custom, channels, configError };
+    return { cursor, models, claudeCode, codex, codexModel, custom, channels, configError };
   })();
   return probed;
 }
@@ -58,7 +62,7 @@ export const resetProbe = () => { probed = undefined; };
 
 interface SeatPlan { seat: Seat; display: string; name?: string }
 
-/** 选手 → 座位：channels.json 里写了的优先（新 AI，或者改自带选手的通道），否则 Claude Code / Cursor */
+/** 选手 → 座位：channels.json 里写了的优先（新 AI，或者改自带选手的通道），否则 Claude Code / Codex 直连，最后才是 Cursor */
 function seatFor(p: Probe, id: string, effort: Effort): SeatPlan | undefined {
   const f = p.custom.fighters[id];
   if (f) {
@@ -70,6 +74,7 @@ function seatFor(p: Probe, id: string, effort: Effort): SeatPlan | undefined {
     return { seat: { channel, model: f.model, effort: e }, display: `${f.channel}/${shown}`, name: f.name };
   }
   if (id === 'claude' && p.claudeCode) return { seat: { channel: p.claudeCode, model: CLAUDE_CODE_MODEL, effort }, display: `claude-code/${CLAUDE_CODE_MODEL}` };
+  if (id === 'codex' && p.codex) return { seat: { channel: p.codex, model: p.codexModel, effort }, display: `codex/${p.codexModel}` };
   const base = CURSOR_ROSTER[id];
   const resolved = p.cursor && base && cursorModelFor(base, effort, p.models);
   if (!p.cursor || !resolved) return undefined;
@@ -107,9 +112,9 @@ export async function customFighters(): Promise<Array<{ id: string; name: string
   return Object.entries(p.custom.fighters).map(([id, f]) => ({ id, name: f.name ?? id.toUpperCase(), ...(f.color ? { color: f.color } : {}), ...(f.maker ? { maker: f.maker } : {}) }));
 }
 
-/** 问题像代码审查就用代码视角，否则用决策视角 */
-export const autoLens = (question: string, dir?: string): LensSet =>
-  dir && /bug|代码|code|review|审查|实现|架构|重构|安全|性能|漏洞|可行/i.test(question) ? 'code' : 'decision';
+/** 立场视角怎么分：3 人以内不分（不同模型本来就会有分歧，硬分视角只会制造假分歧）；人多时问题像代码审查就用代码视角，否则用决策视角 */
+export const autoLens = (question: string, dir: string | undefined, size: number): LensSet | 'none' =>
+  size <= 3 ? 'none' : dir && /bug|代码|code|review|审查|实现|架构|重构|安全|性能|漏洞|可行/i.test(question) ? 'code' : 'decision';
 
 const norm = (s: string) => s.replace(/[\s`*>#|\-—–"“”'‘’]/g, '');
 const REF = /^(.+?):(\d+)(?:-(\d+))?$/;

@@ -41,17 +41,22 @@ export function renderBattleLog(events: MatchEvent[]): string {
   const row = (id: string, round: number, tag: string, who: string, body: string) =>
     out.push(`${pad(id, 4)} R${round} ${tag} ${pad(who, W)}${body}`.trimEnd());
 
+  let round = 0;
   for (const e of events) {
     switch (e.type) {
+      case 'round_started':
+        round = e.round;
+        if (e.phase === 'review') row('', round, '评', 'ALL', '主论点一致，互评一轮：看彼此的完整回答，提出不同意的地方');
+        break;
       case 'claim':
-        row(e.id, 0, '立', teamTag(e.actor) + name(e.actor), `${pad(e.short, 34)}[${LABEL[e.label]}]`);
+        row(e.id, round, round ? '补' : '立', teamTag(e.actor) + name(e.actor), `${pad(e.short, 34)}[${LABEL[e.label]}]`);
         break;
       case 'second':
-        row('', 0, '附', teamTag(e.actor) + name(e.actor), `> ${e.target}  ${e.why}`);
+        row('', round, '附', teamTag(e.actor) + name(e.actor), `> ${e.target}  ${e.why}`);
         break;
       case 'crux': {
         const merged = e.merges.map(m => `${m.from}→${m.into}`).join(' ');
-        row('', 0, '裁', 'JUDGE', `分歧：${e.clash.join('/') || '无'}${merged ? ` · 合并 ${merged}` : ''}${e.consensus.length ? ` · 共识：${e.consensus.join('；')}` : ''}`);
+        row('', round, '裁', 'JUDGE', `分歧：${e.clash.join('/') || '无'}${merged ? ` · 合并 ${merged}` : ''}${e.consensus.length ? ` · 共识：${e.consensus.join('；')}` : ''}`);
         break;
       }
       case 'action':

@@ -1,7 +1,8 @@
 // 提示词模板。系统提示是固定文本（不含比赛内容）；比赛内容全部放在用户提示里。
-// 所有输出都是一个 JSON 对象，字段和 brains.ts 的接口一一对应；长度上限和引擎的截断规则一致。
+// 所有输出都是一个 JSON 对象，字段和 brains.ts 的接口一一对应。回答和展开说明不限长度；
+// 论点、标题、理由这类会上卡片的短字段仍有上限，和引擎的截断规则一致。
 
-export const SYSTEM_FIGHTER = '你是 Crux Arena 辩论赛的一名选手。多个 AI 匿名辩论同一个问题，由裁判逐步裁决，最后综合出给用户的最佳答案。只输出一个 JSON 对象，不要代码块，不要其他文字。用简体中文，简洁直接，不客套。';
+export const SYSTEM_FIGHTER = '你是 Crux Arena 辩论赛的一名选手。多个 AI 匿名辩论同一个问题，由裁判逐步裁决，最后综合出给用户的最佳答案。只输出一个 JSON 对象，不要代码块，不要其他文字。用简体中文，直接，不客套。';
 export const SYSTEM_JUDGE = '你是 Crux Arena 的裁判。选手都是匿名的，你只看论证本身：是否切中要害、是否有依据、是否回应了对方最强的理由。严格、中立、简短。只输出一个 JSON 对象，不要代码块，不要其他文字。用简体中文。';
 export const SYSTEM_CHAIR = '你是 Crux Arena 的主席，负责把一场辩论综合成给用户的最终答案：以经得起交锋的论点为主线，吸收被证实的反驳，给出能直接执行的建议。只输出一个 JSON 对象，不要代码块，不要其他文字。用简体中文。';
 
@@ -20,13 +21,27 @@ ${o.lens ? `\n你的视角：${o.lens}。从这个角度出发，但结论要实
 请独立作答（你看不到其他选手）。给出你认为【最重要的一点】作为主论点，要具体、可执行。${o.canRead ? `
 如果必须先看具体代码或文件才能回答，可以只输出 {"need":["路径:起-止行"]}（最多 3 段，每段不超过 120 行，路径来自上面的仓库地图），引擎会把原文发给你再作答。只有一次机会。` : ''}
 输出格式：
-{"answer":"你的完整回答，不超过 200 字","claim":{"text":"主论点，不超过 50 字","short":"一句话标题，不超过 20 字","label":"fact | inference | speculation"}}
+{"answer":"你的完整回答，不限长度，讲清楚为止","claim":{"text":"主论点，不超过 50 字","short":"一句话标题，不超过 20 字","label":"fact | inference | speculation"}}
 label：fact = 可核实的事实；inference = 推理；speculation = 猜测。`;
 }
 
-export function actPrompt(o: { board: string; context?: string; extra?: string; ownAnswer?: string; teammates?: string[]; feedback?: string[] }): string {
+/** 其他选手的完整回答（匿名代号）：交锋和互评时针对对方真正的论证，而不只是一句话的主论点 */
+const peersBlock = (peers?: Array<{ alias: string; answer: string }>) =>
+  (peers?.length ? `\n其他选手的完整回答：\n${peers.map(p => `【${p.alias}】\n${p.answer}`).join('\n\n')}\n` : '');
+
+export function reviewPrompt(o: { board: string; context?: string; extra?: string; ownAnswer?: string; peers: Array<{ alias: string; answer: string }> }): string {
   return `${contextBlock(o.context)}${o.extra ? `你之前查看过的原文：\n${o.extra}\n\n` : ''}${o.board}
-${o.ownAnswer ? `\n你的盲答：${o.ownAnswer}\n` : ''}
+${o.ownAnswer ? `\n你的盲答：${o.ownAnswer}\n` : ''}${peersBlock(o.peers)}
+大家的主论点一致，但主论点一致不等于细节、风险和做法也一致。逐段读其他选手的完整回答：
+- 有你不同意的地方、他们漏掉的重要风险或前提、做法上的实质分歧，每一处写成一个新论点（最多 2 个），会进入交锋；detail 里讲清楚你的理由。
+- 没有实质分歧就输出 {"claims":[]}。不要为了不同而不同，措辞和侧重点的差别不算。
+输出格式：
+{"claims":[{"text":"新论点，不超过 50 字","short":"一句话标题，不超过 20 字","label":"fact | inference | speculation","detail":"展开说明，不限长度"}]}`;
+}
+
+export function actPrompt(o: { board: string; context?: string; extra?: string; ownAnswer?: string; peers?: Array<{ alias: string; answer: string }>; teammates?: string[]; feedback?: string[] }): string {
+  return `${contextBlock(o.context)}${o.extra ? `你之前查看过的原文：\n${o.extra}\n\n` : ''}${o.board}
+${o.ownAnswer ? `\n你的盲答：${o.ownAnswer}\n` : ''}${peersBlock(o.peers)}
 本回合你可以做的动作：
 - attack：攻击一个你不支持的论点。先写 steelman（对方最强的一点，不超过 30 字），再反驳。
 - defend：为你支持的论点辩护，回应针对它的攻击。
@@ -34,7 +49,7 @@ ${o.ownAnswer ? `\n你的盲答：${o.ownAnswer}\n` : ''}
 - concede：放弃你支持的论点（会让整张卡出局，通常只有作者用），可以带 shiftTo 改投。
 规则：
 - 每回合最多 1 次 attack + 1 次 defend；shift / concede 必须在 causedBy 里写明被哪一步说服（动作编号如 A3，或论点编号如 C2）。
-- why 是一句话理由，不超过 20 字；detail 展开说明，不超过 100 字。
+- why 是一句话理由，不超过 20 字；detail 展开说明，不限长度，讲清楚为止。
 - evidence 只能引用你看过的原文行：{"kind":"file","ref":"PLAN.md:12-20","quote":"原文片段"}。引擎会核对原文，核对通过且裁决成立算暴击；没有就留空，不要编。${o.teammates?.length ? `\n- 组队模式：${o.teammates.join('、')} 是你的队友，不能攻击队友的论点。` : ''}
 - 没有值得做的动作就输出 {"actions":[]}。被说服了就大方承认，硬撑到 0 HP 也会出局。${o.feedback?.length ? `\n\n上一次输出不合规，请修正：\n- ${o.feedback.join('\n- ')}` : ''}
 
@@ -92,7 +107,8 @@ ${o.board}
 
 请综合成给用户的最终答案：
 - 以仍存活、血量高、支持者多的论点为主线；被成立的攻击打掉的观点不要再推荐，但可以吸收其中正确的部分。
+- 各选手完整回答里没有被反驳的有用细节（具体做法、风险、前提），合并进答案，不要只复述主论点。
 - 给出按优先级排序的具体建议，每条写清"做什么"和"为什么"，能直接执行。
 输出格式：
-{"answer":"Markdown，不超过 400 字","minority":["值得保留的少数派意见，每条不超过 40 字"],"userCruxes":["需要用户自己判断的关键问题，每条不超过 40 字"],"confidence":0.7}`;
+{"answer":"Markdown，不限长度，把结论、理由和做法讲完整","minority":["值得保留的少数派意见，每条不超过 40 字"],"userCruxes":["需要用户自己判断的关键问题，每条不超过 40 字"],"confidence":0.7}`;
 }
