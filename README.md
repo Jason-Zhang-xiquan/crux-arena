@@ -250,7 +250,7 @@ A pixel-art fighting-game arena where Claude, GPT, Gemini, DeepSeek, Doubao, Kim
 - **Traceable**: concessions must cite the action that caused them (`causedBy`), otherwise they are flagged as herding. The log is generated deterministically from the event stream.
 - **Token-aware**: compressed board state instead of full transcripts, redundant fighters sit out, early stop on convergence, hard budget shown as a MANA bar.
 - **Folder mode**: debate over a local repo with strictly read-only tools (sandboxed paths, secret files blocked, per-fighter read budgets, full audit).
-- **Real models** (v0.2): fighters run through your own logged-in **Cursor Agent** or **Claude Code**, or any OpenAI-compatible API / CLI / script you add in `channels.json`. Every model call is logged to `calls.jsonl`. This uses your subscription quota.
+- **Real models** (v0.2): fighters run through your own logged-in **Claude Code**, **Codex** or **Cursor Agent**, or any OpenAI-compatible API / CLI / script you add in `channels.json`. Every model call is logged to `calls.jsonl`. This uses your subscription quota.
 - **Start a match from any agent**: `crux fight "question" --team codex,gemini,deepseek --detach` runs in the background (full arena, corner mini window, or headless) and `crux result --wait` returns the champion answer. `crux setup` installs Claude Code skills for matches, custom channels and mascots.
 - **Your own mascots**: every fighter is a 24×20 four-pose pixel sheet; restyle the built-ins or draw new ones (`crux mascot export / new`).
 
