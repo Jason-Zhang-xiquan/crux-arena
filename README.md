@@ -38,7 +38,7 @@ Crux Arena 把这件事变成一场比赛：
 **[⬇ 下载 Windows 安装包](https://github.com/Jason-Zhang-xiquan/crux-arena/releases)**（预览版，未签名：首次运行时 SmartScreen 会提示，点"更多信息 → 仍要运行"）
 
 1. 按 **`Ctrl+Alt+Space`**（被占用时自动换成 `Ctrl+Shift+Space`，托盘里可以看到当前快捷键），弹出输入框。
-2. 写问题，可选一个**文件夹**（只读）、**模式**、**上场选手**（2–6 名，会记住上次的选择）。
+2. 写问题，可选一个**文件夹**（只读）、**模式**、**上场选手**（2–8 名，会记住上次的选择）。
 3. `Ctrl+Enter` 开打：小 AI 们站在**任务栏上方**的透明窗口里打架，空白处鼠标可以穿透，不挡你干活。
 4. 打完弹出**冠军答案卡片**：复制答案、查看战报、打开存档、再看一遍。每场都存成 `events.jsonl` + `battle-log.md`。
 5. **回放**：输入框里的"回放"列出最近的比赛，托盘里也能"回放最近一场 / 打开存档回放"。
@@ -50,13 +50,13 @@ Crux Arena 把这件事变成一场比赛：
 
 <img src="docs/assets/desktop-result.png" alt="桌面版：冠军答案卡片" width="100%">
 
-> 目前用的是**演示大脑**（规则驱动，还没接真实模型），所以对战内容是演示剧本；但文件夹会被真实地只读侦察，画面也完全由引擎事件驱动。接入模型时只替换"大脑"这一层。
+> 选手走你本机已登录的 **Cursor Agent** 或 **Claude Code**，也可以在 `channels.json` 里接任何兼容 OpenAI 的 API、命令行或脚本。一条通道都没有时用**演示大脑**（规则驱动的剧本），画面同样由引擎事件驱动。
 
 ## 🎮 看看效果
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/select.png" alt="选人界面：13 个 AI 吉祥物"><br><sub><b>选人界面</b>：13 名选手、6 种模式、可选只读文件夹</sub></td>
+<td width="50%"><img src="docs/assets/select.png" alt="选人界面：13 个 AI 吉祥物"><br><sub><b>选人界面</b>（网页原型）：13 名选手、可选只读文件夹；6 种模式里目前 FFA / TEAM 可玩</sub></td>
 <td width="50%"><img src="docs/assets/arena-result.png" alt="冠军答案结果页"><br><sub><b>结果页</b>：冠军答案、存活 / 淘汰论点溯源、成本对比</sub></td>
 </tr>
 <tr>
@@ -226,13 +226,15 @@ PLAN.md        完整方案：调研、机制、日志规范、视觉、路线�
 - [x] **从 agent 拉起**：`crux fight --detach` / `crux result --wait`、Claude Code skill、角落小窗；裁判每回合一次裁决、立场视角、选手按需读文件
 - [x] 桌面版回放、设置页（自定义快捷键）、Windows 安装包
 - [ ] 安装包代码签名、自动更新、macOS 版
-- [ ] 接入真实模型（OpenRouter / 各家直连 / Ollama）+ 评测：单模型 vs 多数投票 vs 竞技场
+- [x] **自定义通道与形象**：`channels.json` 接 OpenAI 兼容 API（OpenRouter / Ollama / 各家平台）、命令行、脚本；裁判和主席也能换；24×20 像素形象可改可画
+- [ ] 评测：单模型 vs 多数投票 vs 竞技场
 - [ ] **Phase 2**：精修精灵与音效、攻擂 / 淘汰赛 / 速决 / 讨伐 BOSS、跨比赛"说服力"排行榜
-- [ ] **Phase 3**：`npx crux-arena` 一行启动、在线回放站、Claude Code / MCP 插件
+- [x] Claude Code skill：拉起对局、接通道、画形象（`crux setup`）
+- [ ] **Phase 3**：`npx crux-arena` 一行启动、在线回放站、MCP 插件
 
 ## ⚠️ 声明
 
-所有吉祥物都是本项目原创的像素同人形象，**非官方、与各厂商无关联**；涉及的产品名和商标归各自所有者。原型里的对局是脚本回放，证据来源是演示数据。
+所有吉祥物都是本项目原创的像素同人形象，**非官方、与各厂商无关联**；涉及的产品名和商标归各自所有者。网页原型里的对局是脚本回放，证据来源是演示数据。真实模型通道用的是你自己的 Cursor / Claude 会员，会消耗你的额度，请遵守各家的使用条款。
 
 ---
 
@@ -246,9 +248,15 @@ A pixel-art fighting-game arena where Claude, GPT, Gemini, DeepSeek, Doubao, Kim
 - **Traceable**: concessions must cite the action that caused them (`causedBy`), otherwise they are flagged as herding. The log is generated deterministically from the event stream.
 - **Token-aware**: compressed board state instead of full transcripts, redundant fighters sit out, early stop on convergence, hard budget shown as a MANA bar.
 - **Folder mode**: debate over a local repo with strictly read-only tools (sandboxed paths, secret files blocked, per-fighter read budgets, full audit).
+- **Real models** (v0.2): fighters run through your own logged-in **Cursor Agent** or **Claude Code**, or any OpenAI-compatible API / CLI / script you add in `channels.json`. Every model call is logged to `calls.jsonl`. This uses your subscription quota.
+- **Start a match from any agent**: `crux fight "question" --team codex,gemini,deepseek --detach` runs in the background (full arena, corner mini window, or headless) and `crux result --wait` returns the champion answer. `crux setup` installs Claude Code skills for matches, custom channels and mascots.
+- **Your own mascots**: every fighter is a 24×20 four-pose pixel sheet; restyle the built-ins or draw new ones (`crux mascot export / new`).
+
+**[⬇ Windows installer](https://github.com/Jason-Zhang-xiquan/crux-arena/releases)** (developer preview, unsigned; bundles the `crux` command). macOS / Linux: run from source. No accuracy evaluation yet.
 
 ```bash
 npm install && npm run demo && npm test
+npm run crux -- fight "question" --real --team claude,codex,grok --rounds 2 --budget 250000
 ```
 
 **[▶ Play the live demo](https://jason-zhang-xiquan.github.io/crux-arena/)** — pick fighters and watch a scripted match in your browser (or open `design/mascots.html` locally). Mascots are original fan art, not affiliated with any vendor.

@@ -27,7 +27,7 @@ Crux Arena 让多个模型匿名辩论同一个问题：盲答 → 裁判提取�
 ## 出错时
 
 - `这些选手在本机没有通道`：照输出告诉用户哪些能上场（`crux channels`），问要不要换人。
-- 找不到 `crux` 命令：让用户在 Crux Arena 仓库的 `packages/cli` 里运行一次 `npm link`。
+- 找不到 `crux` 命令：装了桌面版的，让用户在 设置 → AGENT 里点"安装 crux 命令"，然后重开终端；从源码运行的，在仓库的 `packages/cli` 里运行一次 `npm link`。
 - `crux result` 显示"中断"：把 `runner.log` 的最后几行告诉用户。
 
 ## 注意

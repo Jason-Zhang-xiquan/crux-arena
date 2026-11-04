@@ -28,4 +28,4 @@ description: Design or edit a Crux Arena pixel mascot — the 24×20 four-pose s
 
 - 不想要了：`crux mascot reset <编号>`（改名为 .bak，恢复自带形象）。
 - 看都有哪些：`crux mascot list`。
-- 找不到 `crux` 命令：让用户在 Crux Arena 仓库的 `packages/cli` 里运行 `npm link`。
+- 找不到 `crux` 命令：装了桌面版的，让用户在 设置 → AGENT 里点"安装 crux 命令"，然后重开终端；从源码运行的，在仓库的 `packages/cli` 里运行一次 `npm link`。

@@ -6,13 +6,19 @@
 
 ## 1. 安装命令行（一次）
 
+- **装了桌面版**：设置 → AGENT → "安装 crux 命令"（安装包自带命令行，不需要单独装 Node），然后重开终端。
+- **从源码运行**：
+
+  ```bash
+  cd packages/cli
+  npm link
+  ```
+
 ```bash
-cd packages/cli
-npm link
 crux channels        # 看本机能上场哪些选手（只读探测，不耗额度）
 ```
 
-需要 Node ≥ 23.6，以及至少一个已登录的通道：Cursor Agent（`cursor-agent login`）或 Claude Code（`claude auth login`）。
+从源码运行需要 Node ≥ 23.6。都需要至少一个已登录的通道：Cursor Agent（`cursor-agent login`）或 Claude Code（`claude auth login`）。
 
 ## 2. 告诉你的 agent
 
