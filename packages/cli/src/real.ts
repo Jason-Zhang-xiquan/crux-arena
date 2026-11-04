@@ -119,6 +119,9 @@ export const autoLens = (question: string, dir: string | undefined, size: number
 const norm = (s: string) => s.replace(/[\s`*>#|\-—–"“”'‘’]/g, '');
 const REF = /^(.+?):(\d+)(?:-(\d+))?$/;
 const MAX_READ_LINES = 120;
+// 小仓库直接把源码全部放进背景材料：只靠选手按需读 3 段，审查时常有整份文件没人看过
+const SMALL_REPO_BYTES = 48_000;
+const SOURCE = /\.(m?[jt]sx?|cjs|py|go|rs|java|kt|rb|php|cs|c|cc|cpp|h|hpp|swift|vue|svelte|sql|sh)$/i;
 
 export function realBrains(o: RealOptions = {}): BrainsFactory {
   return async ({ fighters, rec, ws, matchDir }) => {
@@ -195,6 +198,22 @@ export function realBrains(o: RealOptions = {}): BrainsFactory {
             const r = await w.readFile('scout', c.path, c.from, c.to);
             parts.push(`【${r.path} 第 ${r.from}–${r.to} 行，共 ${r.totalLines} 行】\n${r.text}`);
           } catch { /* 文件不存在或被屏蔽 */ }
+        }
+        if (!o.context) {
+          // 整个仓库的源码都放得下才全给（目录更深、列表被截断、或总量超过上限，就只给地图，选手按需请求）
+          const entries = await w.listDir('scout', '.', 3);
+          const small = !entries.some(e => e.startsWith('…') || (e.endsWith('/') && e.split('/').length > 3));
+          const src: string[] = [];
+          let used = 0;
+          for (const f of small ? entries.filter(e => !e.endsWith('/') && SOURCE.test(e)).sort() : []) {
+            try {
+              const r = await w.readFile('scout', f);
+              used += r.text.length;
+              if (used > SMALL_REPO_BYTES || r.to < r.totalLines) { src.length = 0; break; }
+              src.push(`【${r.path} 第 ${r.from}–${r.to} 行，共 ${r.totalLines} 行】\n${r.text}`);
+            } catch { /* 被屏蔽或读不了 */ }
+          }
+          parts.push(...src);
         }
         brains.setContext(parts.join('\n\n'));
       },

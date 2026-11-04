@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { ChannelCfg, LlmBrains, createChannel } from '@crux/channels';
 import type { CallRecord } from '@crux/channels';
-import { bugHits, extractChoice, formatQuestion, importGpqa, parseCsv, parseItems, reportEval, runEval, vote } from '../src/eval.ts';
+import { bugHits, decoyHits, extractChoice, formatQuestion, importGpqa, parseCsv, parseItems, reportEval, runEval, vote } from '../src/eval.ts';
 import type { BrainsFactory } from '../src/match.ts';
 
 test('评测：从回答里取选项字母', () => {
@@ -50,6 +50,23 @@ test('评测：shortlink 代码审查题的判分关键词', async () => {
   assert.deepEqual(bugHits(ideal, item), item.bugs.map(b => b.id));
   assert.deepEqual(bugHits('代码整体结构清晰，建议补充单元测试和日志。', item), []);
   assert.deepEqual(bugHits('listLinks 的分页有问题：slice 的第二个参数应该是 start + size。', item), ['b4-pagination']);
+});
+
+test('评测：signup 代码审查题的判分关键词，诱饵被当成 bug 算误报', async () => {
+  const items = parseItems(await readFile(path.join(import.meta.dirname, '..', '..', '..', 'eval', 'code-review.jsonl'), 'utf8'));
+  const item = items.find(i => i.id === 'signup');
+  assert.ok(item?.kind === 'bugs');
+  if (item?.kind !== 'bugs') return;
+  const ideal = [
+    '1. signup.js 的 signup：listSignups 和 addSignup 之间有 await，并发报名会超卖。',
+    '2. export.js exportAttendees：replace 只替换第一个 ../，可以路径穿越写到导出目录之外。',
+    '3. events.js createEvent：{ ...DEFAULTS } 是浅拷贝，没给 tags 的活动共用同一个数组。',
+    '4. points.js totalPoints：forEach(async) 不会等待，总积分恒为 0。',
+    '5. points.js topScores：默认 sort() 是字典序，应该用 (a, b) => b - a。',
+  ].join('\n');
+  assert.deepEqual(bugHits(ideal, item), item.bugs.map(b => b.id));
+  assert.deepEqual(decoyHits(ideal, item), []);
+  assert.deepEqual(decoyHits('signup.js 的 removeExpired 边遍历边删，会跳过元素；export.js readExport 里的 return await 是多余的。', item), ['d1-backward-splice', 'd2-return-await']);
 });
 
 test('评测：题库校验、GPQA 导入（选项固定打乱、答案跟着走）', () => {

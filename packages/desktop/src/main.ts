@@ -2,6 +2,7 @@
 // 引擎和只读文件夹工具直接在这里跑（真实模型或演示大脑），事件逐条推给桌面竞技场窗口。
 // 也会接管 agent 用 crux fight 在后台拉起的对局：完整竞技场、角落小窗或不显示。
 import { BrowserWindow, Menu, Tray, app, clipboard, dialog, globalShortcut, ipcMain, nativeImage, screen, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import { unlinkSync } from 'node:fs';
 import { mkdir, open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -30,6 +31,10 @@ const REPLAY_DIR = argValue('--replay');
 const SPEED = Number(argValue('--speed')) || undefined;
 const EXIT_AFTER_REPLAY = process.argv.includes('--exit-after-replay');
 const BACKDROP = process.argv.includes('--backdrop');   // 录视频时铺深色背景，不录到桌面上的其他窗口
+// 离屏录制：--record <输出.mp4>。竞技场在后台渲染，每一帧直接交给 ffmpeg，不截屏，录制时照常用电脑也不会录进别的窗口
+const RECORD_OUT = argValue('--record');
+const RECORD_SIZE = { width: 1920, height: 600 };
+const RECORD_FPS = 30;
 const BACKGROUND = process.argv.includes('--background'); // 被 crux fight 拉起：只开托盘，不弹输入框
 const FALLBACK_HOTKEYS = ['CommandOrControl+Alt+Space', 'CommandOrControl+Shift+Space', 'Alt+Shift+A'];
 const BAND_HEIGHT = 500;
@@ -138,8 +143,50 @@ function showSettings() {
   settingsWin.on('closed', () => { settingsWin = undefined; });
 }
 
+/** 离屏录制用的竞技场窗口：不显示、不置顶，固定尺寸，背景铺满 */
+function createRecordingArena(): BrowserWindow {
+  const w = new BrowserWindow({
+    ...RECORD_SIZE, show: false, frame: false, useContentSize: true, enableLargerThanScreen: true, backgroundColor: '#0d0a1f',
+    webPreferences: { ...webPreferences, offscreen: true, backgroundThrottling: false },
+  });
+  secure(w);
+  w.loadFile(page('arena.html'), { query: { speed: String(SPEED ?? 1), log: settings.logPanel, replay: '1', backdrop: '1' } });
+  arena = w;
+  return w;
+}
+
+/**
+ * 把离屏窗口的画面写给 ffmpeg：画面有变化才写一帧，ffmpeg 按收到的时刻补齐成固定帧率，视频时长和回放一致。
+ * ffmpeg 来不及编码时跳过这一帧（只是少一帧，不会积压内存、也不会拖慢时间）。返回收尾函数
+ */
+function recordOffscreen(w: BrowserWindow, out: string): () => Promise<number> {
+  let ff: ReturnType<typeof spawn> | undefined, busy = false, size = '';
+  w.webContents.setFrameRate(RECORD_FPS);
+  w.webContents.on('paint', (_e, _dirty, image) => {
+    const s = image.getSize();
+    if (!ff) {
+      // 第一帧到了才启动 ffmpeg：离屏画面的实际像素尺寸以它为准
+      size = `${s.width}x${s.height}`;
+      ff = spawn(process.env.FFMPEG ?? 'ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-y', '-use_wallclock_as_timestamps', '1', '-f', 'rawvideo', '-pix_fmt', 'bgra', '-s', size, '-i', '-',
+        '-fps_mode', 'cfr', '-r', String(RECORD_FPS), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out,
+      ], { stdio: ['pipe', 'inherit', 'inherit'] });
+      ff.stdin!.on('drain', () => { busy = false; });
+      console.log(`[record] 离屏录制 ${size} → ${out}`);
+    }
+    if (busy || `${s.width}x${s.height}` !== size) return;
+    busy = !ff.stdin!.write(image.toBitmap());
+  });
+  return () => new Promise(res => {
+    if (!ff) return res(1);
+    ff.on('exit', code => res(code ?? 1));
+    ff.stdin!.end();
+  });
+}
+
 function createArena(opts: { replay?: boolean } = {}): BrowserWindow {
   arena?.destroy();
+  if (RECORD_OUT && opts.replay) return createRecordingArena();
   const d = cursorDisplay();
   const w = new BrowserWindow({
     x: d.x, y: d.y + d.height - BAND_HEIGHT, width: d.width, height: BAND_HEIGHT,
@@ -535,9 +582,18 @@ async function replayFromArgs(dir: string) {
     console.log(`[record] region ${Math.round(d.x * k)} ${Math.round((d.y + d.height - BAND_HEIGHT) * k)} ${Math.round(d.width * k)} ${Math.round(BAND_HEIGHT * k)}`);
     await new Promise(r => setTimeout(r, 2500));
   }
-  if (EXIT_AFTER_REPLAY) ipcMain.on('arena:progress', (_e, info: { type: string }) => { if (info.type === 'match_ended') setTimeout(() => app.quit(), 12_000); });
+  let stop: (() => Promise<number>) | undefined;
+  if (EXIT_AFTER_REPLAY || RECORD_OUT) ipcMain.on('arena:progress', (_e, info: { type: string }) => {
+    if (info.type !== 'match_ended') return;
+    // 结果卡停留 12 秒；离屏录制先等 ffmpeg 写完文件再退出
+    setTimeout(async () => {
+      if (stop) { const code = await stop(); console.log(code === 0 ? `[record] 完成：${RECORD_OUT}` : `[record] ffmpeg 退出码 ${code}`); app.exit(code); }
+      else app.quit();
+    }, 12_000);
+  });
   const r = await replay(path.resolve(dir));
-  if (!r.ok) { console.error(r.error); app.exit(1); }
+  if (!r.ok) { console.error(r.error); app.exit(1); return; }
+  if (RECORD_OUT && arena) stop = recordOffscreen(arena, path.resolve(RECORD_OUT));
 }
 
 /* ---------- 启动 ---------- */

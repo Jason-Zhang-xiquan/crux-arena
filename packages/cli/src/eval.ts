@@ -20,13 +20,16 @@ const ChoiceItem = z.object({
   choices: z.array(z.string().min(1)).min(2).max(10),
   answer: z.string().regex(/^[A-J]$/),
 });
-// 代码审查：在只读文件夹里埋好 bug，标准答案是这几处；提到位置（文件名或别名，如函数名）且命中任一关键词算找到
+// 代码审查：在只读文件夹里埋好 bug，标准答案是这几处；提到位置（文件名或别名，如函数名）且命中任一关键词算找到。
+// 诱饵（decoys）是看着像 bug、其实没问题的代码：回答里提到它的位置并命中"当成 bug"的关键词，算误报（幻觉）
+const Spot = z.object({ id: z.string().min(1), file: z.string().optional(), aliases: z.array(z.string().min(1)).default([]), keywords: z.array(z.string().min(1)).min(1) });
 const BugsItem = z.object({
   id: z.string().min(1),
   kind: z.literal('bugs'),
   question: z.string().min(1),
   dir: z.string().min(1),            // 相对题库文件
-  bugs: z.array(z.object({ id: z.string().min(1), file: z.string().optional(), aliases: z.array(z.string().min(1)).default([]), keywords: z.array(z.string().min(1)).min(1) })).min(1),
+  bugs: z.array(Spot).min(1),
+  decoys: z.array(Spot).default([]),
 });
 export const EvalItem = z.union([BugsItem, ChoiceItem]);
 export type EvalItem = z.infer<typeof EvalItem>;
@@ -83,14 +86,17 @@ export function vote(choices: Array<string | undefined>, answer: string): { cred
   return { credit: tied[0] === answer ? 1 : 0, outcome: tied[0] === answer ? 'right' : 'wrong', pick: tied[0] };
 }
 
-export function bugHits(text: string, item: Bugs): string[] {
+function spotHits(text: string, spots: Bugs['bugs']): string[] {
   const t = text.toLowerCase();
   const has = (s: string) => t.includes(s.toLowerCase());
-  return item.bugs.filter(b => {
+  return spots.filter(b => {
     const where = [...(b.file ? [path.basename(b.file)] : []), ...(b.aliases ?? [])];
     return (!where.length || where.some(has)) && b.keywords.some(has);
   }).map(b => b.id);
 }
+export const bugHits = (text: string, item: Bugs) => spotHits(text, item.bugs);
+/** 被当成 bug 报出来的诱饵（误报） */
+export const decoyHits = (text: string, item: Bugs) => spotHits(text, item.decoys ?? []);
 
 // ── 运行 ────────────────────────────────────────────────────────────────
 
@@ -197,7 +203,11 @@ export async function runEval(o: RunEvalOptions): Promise<Map<string, EvalRow>> 
 // ── 判分与报告 ──────────────────────────────────────────────────────────
 
 export interface ChoiceScore { id: string; answer: string; picks: Record<string, string | undefined>; vote: ReturnType<typeof vote>; arena?: string; arenaRight: boolean; tokens: number; draftTokens: number; draftBy: Record<string, number>; matchId?: string }
-export interface BugsScore { id: string; total: number; per: Record<string, string[]>; union: string[]; arena: string[]; tokens: number; draftTokens: number; matchId?: string }
+export interface BugsScore {
+  id: string; total: number; per: Record<string, string[]>; union: string[]; arena: string[];
+  decoys: number; falsePer: Record<string, string[]>; falseArena: string[];   // 诱饵个数、被当成 bug 的诱饵
+  tokens: number; draftTokens: number; matchId?: string;
+}
 export interface EvalReport {
   cfg: EvalConfig; items: number; finished: number; forfeits: string[]; errors: string[];
   choice: ChoiceScore[]; bugs: BugsScore[];
@@ -219,7 +229,12 @@ export function grade(cfg: EvalConfig, items: EvalItem[], rows: Map<string, Eval
     } else {
       const per = Object.fromEntries(cfg.team.map(id => [id, bugHits(row.drafts[id]?.text ?? '', item)]));
       const union = [...new Set(Object.values(per).flat())];
-      rep.bugs.push({ id: item.id, total: item.bugs.length, per, union, arena: bugHits(row.final ?? '', item), tokens: row.totalTokens, draftTokens, matchId: row.matchId });
+      const falsePer = Object.fromEntries(cfg.team.map(id => [id, decoyHits(row.drafts[id]?.text ?? '', item)]));
+      rep.bugs.push({
+        id: item.id, total: item.bugs.length, per, union, arena: bugHits(row.final ?? '', item),
+        decoys: item.decoys.length, falsePer, falseArena: decoyHits(row.final ?? '', item),
+        tokens: row.totalTokens, draftTokens, matchId: row.matchId,
+      });
     }
   }
   return rep;
@@ -271,11 +286,14 @@ export function renderReport(r: EvalReport): string {
   if (b.length) {
     const total = b.reduce((x, s) => x + s.total, 0);
     const found = (f: (s: BugsScore) => string[]) => b.reduce((x, s) => x + f(s).length, 0);
-    L.push('', `## 代码审查（${b.length} 个仓库，共埋 ${total} 个 bug）`, '', '| 方式 | 找到 | 召回 |', '|---|---|---|');
-    L.push(`| **竞技场**（冠军答案） | ${found(s => s.arena)} | ${pct(found(s => s.arena), total)} |`);
-    L.push(`| 选手盲答合起来（任一人找到就算） | ${found(s => s.union)} | ${pct(found(s => s.union), total)} |`);
-    for (const id of cfg.team) L.push(`| 单模型 ${id} | ${found(s => s.per[id] ?? [])} | ${pct(found(s => s.per[id] ?? []), total)} |`);
-    L.push('', '按"提到文件名 + 命中关键词"自动判，可能漏判或误判，引用前请人工核对存档里的原文。');
+    const decoys = b.reduce((x, s) => x + s.decoys, 0);
+    const fp = (f: (s: BugsScore) => string[]) => (decoys ? ` | ${b.reduce((x, s) => x + f(s).length, 0)} / ${decoys}` : '');
+    L.push('', `## 代码审查（${b.length} 个仓库，共埋 ${total} 个 bug${decoys ? `、${decoys} 个诱饵` : ''}）`, '',
+      `| 方式 | 找到 | 召回${decoys ? ' | 误报诱饵' : ''} |`, `|---|---|---${decoys ? '|---' : ''}|`);
+    L.push(`| **竞技场**（冠军答案） | ${found(s => s.arena)} | ${pct(found(s => s.arena), total)}${fp(s => s.falseArena)} |`);
+    L.push(`| 选手盲答合起来（任一人找到就算） | ${found(s => s.union)} | ${pct(found(s => s.union), total)}${decoys ? ' | —' : ''} |`);
+    for (const id of cfg.team) L.push(`| 单模型 ${id} | ${found(s => s.per[id] ?? [])} | ${pct(found(s => s.per[id] ?? []), total)}${fp(s => s.falsePer[id] ?? [])} |`);
+    L.push('', `按"提到文件名 + 命中关键词"自动判，可能漏判或误判，引用前请人工核对存档里的原文。${decoys ? '诱饵是看着像 bug、其实没问题的代码，被报出来就算误报。' : ''}`);
   }
 
   L.push('', '---', '样本很小，只能看方向：对外请写"N 题里改对 X 题、改错 Y 题"，不要直接说"更准"。每题的完整过程见 `matches/<存档>/battle-log.md`。');
