@@ -89,6 +89,8 @@ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
 .res.dmg{color:#ff6b6b}.res.heal{color:var(--blue)}.res.ko{color:var(--red)}.res.save{color:var(--green)}.res.ok{color:var(--gold)}
 .ln .r2{margin-top:3px;color:#e2d8ff;line-height:15px}
 .ln .rl{color:var(--violet)}
+.ln .r3{margin-top:3px;color:#b9addc;font-size:12px;line-height:15px;cursor:pointer;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ln .r3.open{display:block}
 .ref{color:var(--gold);margin-left:5px;cursor:pointer;border-bottom:1px solid var(--gold)}
 .ln.flash{animation:lflash 1s steps(4)}
 @keyframes lflash{25%,75%{background:#5a4610}}

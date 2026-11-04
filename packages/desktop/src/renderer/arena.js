@@ -80,11 +80,20 @@ const fname = id => (!id ? 'JUDGE' : S.fighters[id]?.name ?? (id === 'scout' ? '
 const fcolor = id => S.fighters[id]?.color ?? '#b8a6ff';
 
 /* ---------- 对话气泡 ---------- */
+/** 气泡里只放要点：回答和展开说明不限长度，全文在侧边日志里（点开看）。优先在句末截断 */
+function brief(text, max = 80) {
+  const s = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if ([...s].length <= max) return s;
+  const head = [...s].slice(0, max).join('');
+  const end = Math.max(...[...'。！？；.!?;'].map(p => head.lastIndexOf(p)));
+  return end >= 30 ? head.slice(0, end + 1) : head + '…';
+}
 let bubble;
 async function say(id, act, text, ev) {
   bubble?.remove();
   const f = S.fighters[id];
   const b = document.createElement('div');
+  text = brief(text); ev = ev && brief(ev, 50);
   b.className = 'bubble'; b.style.setProperty('--fc', f?.color ?? '#b8a6ff');
   b.innerHTML = `<span class="who">${esc(fname(id))}</span>${act ? `<span class="act">${esc(act)}</span>` : ''}<span class="t">${esc(text)}</span>${ev ? `<span class="ev">🔍 ${esc(ev)}</span>` : ''}`;
   stage.appendChild(b); bubble = b;
@@ -169,12 +178,13 @@ function logLine(o) {
   d.className = 'ln'; d.dataset.id = o.id ?? '';
   d.style.setProperty('--lc', o.color ?? fcolor(o.who));
   const refs = (o.refs ?? []).map(r => `<span class="ref" data-ref="${r}">←${r.startsWith('A') ? '#' : ''}${r}</span>`).join('');
-  d.innerHTML = `<div class="r1"><span class="lid">${o.id ? (o.id.startsWith('A') ? '#' : '') + o.id : ''}</span><span class="rd">R${o.round ?? S.round}</span><span class="tag ${o.tagc}">${o.tag}</span><span class="who" style="color:${o.color ?? fcolor(o.who)}">${esc(o.name ?? fname(o.who))}</span>${o.tgt ? `<span class="tg">&gt; ${o.tgt}</span>` : ''}<span class="res ${o.resc ?? ''}">${esc(o.res ?? '')}</span></div><div class="r2">${esc(o.why)}<span class="rl">${o.ruling ? `｜${esc(o.ruling)}` : ''}</span>${refs}</div>`;
+  d.innerHTML = `<div class="r1"><span class="lid">${o.id ? (o.id.startsWith('A') ? '#' : '') + o.id : ''}</span><span class="rd">R${o.round ?? S.round}</span><span class="tag ${o.tagc}">${o.tag}</span><span class="who" style="color:${o.color ?? fcolor(o.who)}">${esc(o.name ?? fname(o.who))}</span>${o.tgt ? `<span class="tg">&gt; ${o.tgt}</span>` : ''}<span class="res ${o.resc ?? ''}">${esc(o.res ?? '')}</span></div><div class="r2">${esc(o.why)}<span class="rl">${o.ruling ? `｜${esc(o.ruling)}` : ''}</span>${refs}</div>${o.more ? `<div class="r3" title="点击展开 / 收起">${esc(o.more)}</div>` : ''}`;
   lines.appendChild(d); lines.scrollTop = lines.scrollHeight;
   if (o.id) lineEls[o.id] = d;
   return d;
 }
 lines.addEventListener('click', e => {
+  const more = e.target.closest('.r3'); if (more) { more.classList.toggle('open'); return; }
   const ref = e.target.closest('.ref'); if (!ref) return;
   const t = lines.querySelector(`.ln[data-id="${ref.dataset.ref}"]`);
   if (t) { t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash'); lines.scrollTop = t.offsetTop - lines.clientHeight / 2; }
@@ -244,7 +254,7 @@ const H = {
     addTokens(e.tokens);
     const ev = e.evidence[0] ? `${e.evidence[0].kind === 'file' ? e.evidence[0].ref : '[web]'} ${e.evidence[0].quote ?? ''}` : '';
     await say(e.actor, `${KIND[e.kind]} > ${e.target}`, e.detail || e.why, ev);
-    const tag = { round: e.round, id: e.id, who: e.actor, tag: KIND[e.kind], tagc: TAGC[e.kind], tgt: e.target, why: e.why + (e.evidence.length ? ' [证据]' : ''), refs: e.causedBy };
+    const tag = { round: e.round, id: e.id, who: e.actor, tag: KIND[e.kind], tagc: TAGC[e.kind], tgt: e.target, why: e.why + (e.evidence.length ? ' [证据]' : ''), refs: e.causedBy, ...(e.detail ? { more: e.detail } : {}) };
     if (e.kind === 'attack' && f) {
       setPose(e.actor, 'atk', 650);
       f.el.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${f.el.classList.contains('flip') ? -26 : 26}px)` }, { transform: 'translateX(0)' }], { duration: 300 / speed, easing: 'steps(3)' });
