@@ -36,6 +36,22 @@ test('评测：多数投票、平票按期望计分、代码审查命中', () =>
   assert.deepEqual(bugHits('有地方没检查 expiry', item), []);                  // 没提文件名
 });
 
+test('评测：shortlink 代码审查题的判分关键词', async () => {
+  const [item] = parseItems(await readFile(path.join(import.meta.dirname, '..', '..', '..', 'eval', 'code-review.jsonl'), 'utf8'));
+  assert.equal(item.kind, 'bugs');
+  if (item.kind !== 'bugs') return;
+  const ideal = [
+    '1. server.js 的 DELETE 接口不检查所有者，任何登录用户都能删别人的短链（越权）。',
+    '2. links.js createLink：自定义短码不检查是否已存在，会覆盖别人的短链。',
+    '3. ratelimit.js clientKey 直接信任 X-Forwarded-For，伪造请求头即可绕过限流。',
+    '4. auth.js issueToken 用毫秒时间戳加上秒数，令牌 3.6 秒就过期。',
+    '5. listLinks 分页写成 slice(start, size)，第 2 页起为空。',
+  ].join('\n');
+  assert.deepEqual(bugHits(ideal, item), item.bugs.map(b => b.id));
+  assert.deepEqual(bugHits('代码整体结构清晰，建议补充单元测试和日志。', item), []);
+  assert.deepEqual(bugHits('listLinks 的分页有问题：slice 的第二个参数应该是 start + size。', item), ['b4-pagination']);
+});
+
 test('评测：题库校验、GPQA 导入（选项固定打乱、答案跟着走）', () => {
   assert.throws(() => parseItems('{"id":"x","question":"q","choices":["a","b"],"answer":"C"}'), /超出选项范围/);
   assert.throws(() => parseItems('{"id":"x","question":"q","choices":["a","b"],"answer":"A"}\n{"id":"x","question":"q","choices":["a","b"],"answer":"A"}'), /重复/);

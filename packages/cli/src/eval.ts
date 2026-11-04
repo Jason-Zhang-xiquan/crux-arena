@@ -20,18 +20,18 @@ const ChoiceItem = z.object({
   choices: z.array(z.string().min(1)).min(2).max(10),
   answer: z.string().regex(/^[A-J]$/),
 });
-// 代码审查：在只读文件夹里埋好 bug，标准答案是这几处；提到文件名且命中任一关键词算找到
+// 代码审查：在只读文件夹里埋好 bug，标准答案是这几处；提到位置（文件名或别名，如函数名）且命中任一关键词算找到
 const BugsItem = z.object({
   id: z.string().min(1),
   kind: z.literal('bugs'),
   question: z.string().min(1),
   dir: z.string().min(1),            // 相对题库文件
-  bugs: z.array(z.object({ id: z.string().min(1), file: z.string().optional(), keywords: z.array(z.string().min(1)).min(1) })).min(1),
+  bugs: z.array(z.object({ id: z.string().min(1), file: z.string().optional(), aliases: z.array(z.string().min(1)).default([]), keywords: z.array(z.string().min(1)).min(1) })).min(1),
 });
 export const EvalItem = z.union([BugsItem, ChoiceItem]);
 export type EvalItem = z.infer<typeof EvalItem>;
 type Choice = z.infer<typeof ChoiceItem>;
-type Bugs = z.infer<typeof BugsItem>;
+type Bugs = z.input<typeof BugsItem>;
 
 export function parseItems(text: string, source = '题库'): EvalItem[] {
   const items: EvalItem[] = [];
@@ -85,7 +85,11 @@ export function vote(choices: Array<string | undefined>, answer: string): { cred
 
 export function bugHits(text: string, item: Bugs): string[] {
   const t = text.toLowerCase();
-  return item.bugs.filter(b => (!b.file || t.includes(path.basename(b.file).toLowerCase())) && b.keywords.some(k => t.includes(k.toLowerCase()))).map(b => b.id);
+  const has = (s: string) => t.includes(s.toLowerCase());
+  return item.bugs.filter(b => {
+    const where = [...(b.file ? [path.basename(b.file)] : []), ...(b.aliases ?? [])];
+    return (!where.length || where.some(has)) && b.keywords.some(has);
+  }).map(b => b.id);
 }
 
 // ── 运行 ────────────────────────────────────────────────────────────────

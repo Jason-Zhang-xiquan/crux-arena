@@ -44,7 +44,19 @@ crux eval report <评测目录>                                           # 零 
   {"id":"b2","keywords":["off-by-one","越界","<="]}]}
 ```
 
-`dir` 相对题库文件。回答里提到文件名（写了 `file` 时）并命中任一关键词，算找到这个 bug。这是粗判，会漏判也会误判，引用结果前请人工核对。报告会对比冠军答案、每位选手，以及"选手合起来"（任一人找到就算）。
+`dir` 相对题库文件。回答里提到位置（`file` 的文件名，或 `aliases` 里的任一项，比如函数名）并命中任一关键词，算找到这个 bug。这是粗判，会漏判也会误判，引用结果前请人工核对。报告会对比冠军答案、每位选手，以及"选手合起来"（任一人找到就算）。
+
+现成的一题：[eval/code-review.jsonl](../eval/code-review.jsonl)，仓库是 [eval/bug-repos/shortlink](../eval/bug-repos/shortlink)。这是一个约 250 行的短链服务，埋了 5 个 bug，每个都用脚本证实过：
+
+| bug | 位置 | 后果 |
+|---|---|---|
+| b1 | `auth.js` `issueToken` | 毫秒时间戳加的是秒数，令牌 3.6 秒就过期，而不是 1 小时 |
+| b2 | `ratelimit.js` `clientKey` | 信任客户端自报的 `X-Forwarded-For`，每次换个值就能绕过限流 |
+| b3 | `links.js` `createLink` | 自定义短码不检查是否已被占用，可以覆盖（劫持）别人的短链 |
+| b4 | `links.js` `listLinks` | `slice(start, size)`，第 2 页起永远是空的 |
+| b5 | `server.js` 删除接口 | 不检查所有者，任何登录用户都能删别人的短链 |
+
+答案写在题库文件里，选手只能读 `dir` 里的仓库，看不到。仓库代码里没有任何提示性注释。注意盲答限 200 字、冠军答案限 400 字，单个选手很难一次列全 5 个。
 
 ## GPQA
 
